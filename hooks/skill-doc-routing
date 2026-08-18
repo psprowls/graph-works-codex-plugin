@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# PreToolUse hook on Skill: point graph-works workflow spec/plan/guidance
+# artifacts at the per-item working directory. Mirrors hooks/session-start's
+# escaping and 3-way platform JSON branching. Fail-open: never blocks a Skill call.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# plugins/graph-works/hooks -> repo root is three levels up. Used as the uv
+# project so workspace_io is importable without relying on AGENT_RESEARCH_ROOT.
+ROOT="${AGENT_RESEARCH_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+
+allow() {
+    if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+        printf '{"additional_context": ""}\n'
+    else
+        printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}\n'
+    fi
+}
+
+# Fail-open on any unexpected error.
+trap 'allow; exit 0' ERR
+
+INPUT=$(cat)
+
+# Fast path: only the doc-writing / pipeline skills matter. Cheap match on the
+# raw payload — no jq, no uv spin-up for any other skill.
+# Match is deliberately payload-wide (not name-scoped): trading a rare spurious uv spin-up for independence from the skill-id field name and namespacing.
+if ! printf '%s' "$INPUT" | grep -qE '(brainstorming|writing-plans|workflow|onboard)'; then
+    allow; exit 0
+fi
+
+# Confirm a workspace resolves at all (fail-open with a warning otherwise).
+# The pointer injected below is slug-agnostic and needs no resolved path: this
+# hook fires PreToolUse on Skill, before the dispatched skill's body (and
+# therefore any slug) is visible to it, so it cannot compute a real
+# wiki/work/<slug>/... path here.
+RESOLVED=$(uv run --project "$ROOT" python -c '
+import sys
+from pathlib import Path
+try:
+    from workspace_io import config
+    config.resolve(Path.cwd())
+    sys.stdout.write("OK")
+except Exception as e:
+    sys.stdout.write("ERR:" + str(e).replace("\n", " "))
+' 2>/dev/null) || RESOLVED="ERR:uv-invocation-failed"
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+if [ "${RESOLVED:0:4}" = "ERR:" ]; then
+    warn="graph-works: could not resolve a workspace, so brainstorming/writing-plans/workflow output will NOT be routed to wiki/work/<slug>/. (${RESOLVED#ERR:})"
+    warn_escaped=$(escape_for_json "$warn")
+    printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}, "systemMessage": "%s"}\n' "$warn_escaped"
+    exit 0
+fi
+
+context="GRAPH-WORKS WORKSPACE ROUTING: graph-works workflow artifacts (specs, plans, guidance bundles) belong under <workspace>/wiki/work/<slug>/ — created by \`gw work file\` at filing time. If you were pipeline-dispatched, your brief states the exact path (\`artifact.path\`). If this is a standalone/auto-file invocation, derive it yourself once the slug is known (e.g. spec -> wiki/work/<slug>/01-design-spec.md, plan -> wiki/work/<slug>/02-plan-plan.md). raw/ is the external-source inbox only (articles, PRs, tickets for /graph-works:ingest) — not a spec/plan destination."
+context_escaped=$(escape_for_json "$context")
+
+# Cursor expects additional_context (snake_case); Claude Code expects nested
+# hookSpecificOutput.additionalContext; Copilot/SDK expect top-level.
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+    printf '{"additional_context": "%s"}\n' "$context_escaped"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
+    printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "additionalContext": "%s"}}\n' "$context_escaped"
+else
+    printf '{"additionalContext": "%s"}\n' "$context_escaped"
+fi
+exit 0
