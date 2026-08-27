@@ -2,7 +2,7 @@
 
 > **Substrate ownership.** This document describes behavior that the graph-works rebuild is
 > re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`2026-08-13-epic-feature-scan-pipeline-vertical`](/work/2026-08-13-epic-feature-scan-pipeline-vertical.md) and is re-authored there, not here.
+> the behavioral truth is owned by [`feature-epic-feature-scan-pipeline-vertical`](/work/_archive/epic-graph-works-core/children/_archive/feature-epic-feature-scan-pipeline-vertical.md) and is re-authored there, not here.
 > Treat a disagreement between this page and that item as this page being stale.
 
 Why this pattern works for a source code monorepo, and how it differs from the generic LLM Wiki.
@@ -32,7 +32,7 @@ A maintained wiki **compiles** this into one searchable, cross-referenced layer 
 | Manual maintenance | LLM does the bookkeeping |
 | Can't capture decisions (those live in PR descriptions) | ADRs capture decisions with traceable history |
 | Can't consolidate across tickets/PRs | Issues and architecture pages synthesize across sources |
-| No home for ingested articles or external material | `raw/` + `sources/` keep everything alongside code |
+| No home for ingested articles or external material | `sources/` (with copies under `sources/references/`) keeps everything alongside code |
 
 ## Why LLMs make this work now
 
@@ -53,11 +53,11 @@ The generic [wiki](../../wiki) pattern (entities/concepts/sources/synthesis/comp
 
 | Generic LLM Wiki | Code Wiki |
 |---|---|
-| `entities/` (people, orgs, places) | `entities/` (one graph-derived page per admitted entity kind: repository, package, app, agent_plugin, dependency, test_suite) |
+| `entities/` (people, orgs, places) | `repositories/<repo>/` + `dependencies/` (one graph-derived page per admitted entity kind: repository, package, app, agent_plugin, dependency, test_suite) |
 | `concepts/` | `concepts/` (cross-cutting patterns; `<a>-vs-<b>.md` comparisons live here) |
 | `sources/` | Same, but source types are: spec, PR, ticket, article, transcript, RFC |
 | `synthesis/` | `concepts/` (with `kind: architecture`) |
-| *(none)* | `entities/dep_*` — one graph-derived page per dependency (`kind: package | service`) |
+| *(none)* | `dependencies/<ecosystem>/*` — one graph-derived page per dependency (`kind: package | service`) |
 | *(none)* | `adrs/` — dated, citable decisions |
 | Index-first retrieval | Same, plus **code-drift detection** (entities on disk vs. in wiki) |
 | One-time curation | Continuous — every scan/merge picks up new entities automatically |

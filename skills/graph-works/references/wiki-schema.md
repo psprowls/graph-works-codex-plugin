@@ -1,51 +1,66 @@
 # Wiki Schema
 
-> **Substrate ownership.** This document describes behavior that the graph-works rebuild is
-> re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`2026-08-11-epic-wiki-io-format-layer`](/work/2026-08-11-epic-wiki-io-format-layer.md) and is re-authored there, not here.
-> Treat a disagreement between this page and that item as this page being stale.
+> **Substrate ownership.** `epic-wiki-io-format-layer` (the item this disclaimer used to
+> point at) is `resolved`/`phase: done` — pointing readers there now sends them to closed
+> history, not live truth. If this page and the shipped workspace tree
+> (`<repo>/.works/okf/...`) disagree, treat this page as stale and file (or find) the
+> TechDebt item that tracks the drift; see
+> [[../../../../work/tech-debt-plugin-docs-layout-claims]] for the layout-claim sweep that
+> last corrected this page.
 
 The wiki sits inside a graph-works workspace alongside other workspace-level directories. The LLM must respect the boundaries.
 
 ## Layout
 
-The wiki lives at `<workspace>/wiki/`. The workspace is resolved via `gw`, which prefers the `GRAPH_WORKS_DIR` env var — the supported way to point at a workspace, normally injected via the `env` block of the `.claude/settings.local.json` belonging to whichever directory the session runs from. There is no workspace-path key inside `workspace.yaml` itself. Without the env var, resolution falls back to `<repo>/graph-works/` — a `.git` walk-up plus the default name, never a search for `workspace.yaml` — so a workspace kept anywhere else is reachable only via the env var or an explicit `--workspace`. The Obsidian vault opens at `<workspace>/`, so `raw/` (source inbox; ingested sources move to `raw/_archive/`) sits at the workspace root as a sibling of `wiki/`, owned by `gw`. `work/` (work tracker) lives at `<workspace>/wiki/work/` — nested under `wiki/`, not a workspace-root sibling — so `[[work/foo]]` wikilinks resolve the same way as `[[concepts/foo]]`; schema owned by `gw`, lifecycle owned by this plugin.
+The workspace root lives at `<repo>/.works/`. Workspace resolution prefers an
+explicit `--workspace`, then `GRAPH_WORKS_DIR`, then a `.git` walk-up to that
+default. The OKF bundle lives at `<workspace>/okf/`; `.gw/` is the control plane
+(cache and worktree state nest under it, not as top-level workspace siblings).
+Ingest reads material directly from any filesystem path; there is no staging inbox and no separate knowledge store. The Obsidian vault opens at `<workspace>/okf/`.
 
 ```
-<repo>/graph-works/               # workspace; Obsidian vault opens here
-├── workspace.yaml                # workspace manifest (owned by gw)
-├── CLAUDE.md                    # workspace-level schema (owned by gw)
-├── raw/                         # source inbox; ingested sources move to _archive/
-│   ├── articles/*.md            # Obsidian Web Clipper output
-│   ├── specs/*.md               # design docs, RFCs
-│   ├── prs/*.md                 # PR descriptions and review notes
-│   ├── tickets/*.md             # issue exports
-│   ├── transcripts/*.md         # meeting and design-session notes
-│   └── assets/                  # images referenced by sources
-├── knowledge/                   # other plugin-managed knowledge stores
-└── wiki/                        # this plugin's curated knowledge base
-    ├── index.md                 # content catalog — updated every ingest/scan
-    ├── log.md                   # append-only timeline
-    ├── work/                    # unified bugs, tech debt, features, initiatives, spikes
-    │   └── _archive/            # terminal-status items; consider archiving when status is terminal
-    ├── entities/                # one page per graph-derived entity (all kinds)
-    │   └── <prefix>_<name>.md   # e.g. pkg_common-aws-node-ts.md, app_web-next-ts.md
-    ├── concepts/                # cross-cutting technical concepts; optional kind: concept | pattern | architecture
-    ├── sources/                 # one summary page per ingested source
-    ├── adrs/                    # architecture decision records
-    ├── .templates/              # page templates (reference only, not indexed)
-    ├── CLAUDE.md                # wiki schema file for Claude Code
-    ├── AGENTS.md                # same schema for Codex/Cursor/Antigravity
-    └── .cursorrules             # (optional) legacy Cursor
+<repo>/.works/                      # workspace root
+├── workspace.yaml                  # workspace manifest (owned by gw)
+├── .gw/                            # control plane
+│   ├── cache/                      # nested under .gw/, not a top-level sibling
+│   └── worktrees/                  # nested under .gw/, not a top-level sibling
+└── okf/                            # bundle root; Obsidian vault root
+    ├── index.md                    # content catalog — updated every ingest/scan
+    ├── log.md                      # append-only timeline
+    ├── tags.yaml
+    ├── work/                       # unified bugs, tech debt, features, initiatives, spikes
+    │   └── _archive/                # terminal-status items; consider archiving when status is terminal
+    ├── repositories/<repo>/
+    │   ├── repository.md           # the repository's own entity page
+    │   ├── packages/<name>.md
+    │   ├── apps/<name>.md
+    │   ├── agent-plugins/<name>.md
+    │   ├── test-suites/<name>.md
+    │   └── files/<source-path>.md
+    ├── dependencies/<ecosystem>/<name>.md   # sibling root, NOT nested under repositories/
+    ├── tutorials/ how-tos/ references/ explanations/   # Diátaxis lanes
+    ├── concepts/                   # cross-cutting technical concepts; optional kind: concept | pattern | architecture
+    ├── sources/                    # one summary page per ingested source
+    │   └── references/             # copies of ingested material (the ingest flow copies here; originals are never moved)
+    ├── adrs/                       # architecture decision records
+    ├── proposals/                  # curated-page proposal ledger
+    ├── .templates/                 # page templates (reference only, not indexed)
+    ├── CLAUDE.md                   # wiki schema file for Claude Code
+    ├── AGENTS.md                   # same schema for Codex/Cursor/Antigravity
+    └── .cursorrules                # (optional) legacy Cursor
 ```
 
-`entities/` is the single flat folder for all graph-derived entity pages (kinds: `repository`, `package`, `app`, `agent_plugin`, `dependency`, `test_suite`). There are no separate `apps/` or `packages/` page folders. Bootstrap seeds `entities/.gitkeep`; `write_entities` removes it once real pages exist and restores it if all pages are swept.
+Entity pages are nested under `repositories/<repo>/`, one folder per kind
+(`packages/`, `apps/`, `agent-plugins/`, `test-suites/`), plus the repository's
+own `repository.md`. `dependency` is the one entity kind that is NOT nested
+under `repositories/` — it is a sibling root, `dependencies/<ecosystem>/<name>.md`.
+There is no `entities/` folder and no filename-prefix scheme.
 
 ## Iron rules
 
 1. **The code is the source of truth.** If the wiki disagrees with the code, update the wiki — never the other way around.
-2. **`<workspace>/raw/` contents are read-only.** The LLM never edits, renames within, or deletes staged sources — the single permitted operation is moving a successfully-ingested source to `raw/_archive/<same relative path>`.
-3. **All wiki writes go under `<workspace>/wiki/`.** Work items go to `<workspace>/wiki/work/` (schema owned by `gw`; nested under `wiki/`, not the workspace root). No exceptions.
+2. **Ingested source material is never edited.** The ingest flow (either `gw ingest`'s `--backend bedrock`/`vercel` pipeline, or the `claude_code`-mode ingestor sub-agent per `/graph-works:ingest`) copies material into `<workspace>/okf/sources/references/` — the original file, wherever it lives, is left untouched. There is no staging inbox and no post-ingest move.
+3. **All curated writes go under `<workspace>/okf/`.** Work items use canonical paths below `<workspace>/okf/work/`. No exceptions.
 4. **Every scan or ingest updates ≥3 files:** the touched page(s), `index.md`, `log.md`. A typical ingest touches 5-15.
 5. **Every wiki page carries YAML frontmatter.** Without frontmatter, index maintenance and `lint_wiki.py` can't see it.
 
@@ -68,7 +83,7 @@ Allowed `category` values: `app`, `package`, `concept`, `dependency`, `work`, `s
 
 ### Entity pages
 
-Entity pages live under `<workspace>/wiki/entities/` — one page per graph-derived entity, regardless of kind. All entity frontmatter is split into two sets:
+Entity pages live under `<workspace>/okf/repositories/<repo>/` (one folder per kind — `packages/`, `apps/`, `agent-plugins/`, `test-suites/` — plus the repository's own `repository.md`), except `dependency` pages, which live at the sibling root `<workspace>/okf/dependencies/<ecosystem>/<name>.md`. All entity frontmatter is split into two sets:
 
 **Scanner-owned keys** (replaced every scan — do not hand-edit these):
 
@@ -134,9 +149,9 @@ Concepts are cross-cutting technical patterns — naming conventions, middleware
 
 ### Dependency pages
 
-`/graph-works:scan` writes one graph-derived dependency page per dep into `entities/dep_<name>.md`, using the scanner-owned shape from `entity-dependency.md` (`uri`, `kind: dependency`, `graph_name`, `last_scan_at`, `ecosystem`, `used_by`, `versions_in_use` — no `category`, `provider`, or `load_bearing`). The `category: dependency` / `kind: package|service` shape below is a **legacy curated-page shape**, hand-authored and checked only by the opt-in `dependency_layer` lint group (`lint/dependency.py`, run via `gw wiki lint --check dependency_layer`); it does not apply to scanner-generated `entities/dep_*.md` pages. `load_bearing: true` is recorded explicitly on these legacy pages so `dependency_layer` can flag load-bearing deps that warrant fuller prose.
+`/graph-works:scan` writes one graph-derived dependency page per dep into `dependencies/<ecosystem>/<name>.md`, using the scanner-owned shape from `entity-dependency.md` (`uri`, `kind: dependency`, `graph_name`, `last_scan_at`, `ecosystem`, `used_by`, `versions_in_use` — no `category`, `provider`, or `load_bearing`). The `category: dependency` / `kind: package|service` shape below is a **legacy curated-page shape**, hand-authored and **currently checked by nothing** — the `dependency_layer` lint group that once gated it does not exist in graph-works-core, and `gw wiki lint` is a fixed pipeline with no group selection. It does not apply to scanner-generated `dependencies/<ecosystem>/<name>.md` pages. `load_bearing: true` is recorded on these legacy pages but has no reader today; whether the shape survives at all is open in `2026-08-20-tech-debt-revisit-dependency-layer-lint`.
 
-**`kind: package`** (e.g., `entities/dep_react.md`):
+**`kind: package`** (e.g., `dependencies/npm/react.md`):
 
 ```yaml
 ---
@@ -155,7 +170,7 @@ updated: 2026-04-20
 ---
 ```
 
-**`kind: service`** (e.g., `entities/dep_mongodb-atlas.md`):
+**`kind: service`** (e.g., `dependencies/mongodb-atlas.md`):
 
 ```yaml
 ---
@@ -180,86 +195,63 @@ Field divergences:
 
 ### Work pages
 
-Unified namespace replacing `issues/` + `roadmap/`. `category: work`. `kind:` discriminates between bug-shaped and feature-shaped items; a single status lifecycle covers both. Slugs follow `<YYYY-MM-DD>-<kind>-<w1>-<w2>-<w3>-<w4>.md`, where the 4 words are filer-supplied via `gw work file --slug-words` (falling back to the first 4 words of the title when omitted); children filed under a parent epic get `epic-<kind>` instead of `<kind>`. No migration — pre-existing pages keep their old `<YYYY-MM-DD>-<short-slug>.md` filenames; both formats coexist since every consumer reads slugs from file stems.
+Work items are path-native OKF concepts. A permanent identity is an extensionless
+bundle-relative path, not a page stem:
 
-```yaml
----
-title: <Title>
-category: work
-kind: bug                       # bug | tech-debt | test-gap | security | perf | feature | epic | spike
-summary: <one-line>
-status: open                    # open | accepted | in-progress | mitigated | resolved | wontfix | superseded
-severity: medium                # bug | security | perf — leave blank for feature/epic/spike
-effort: small                   # xtra-small | small | medium | large | xtra-large
-blast_radius: package           # file | package | domain | system
-affects:
-  - packages/location-aws-node-ts
-parent: 2026-07-01-epic-big-thing   # child side: owning epic/feature slug (source of truth)
-depends_on: []                      # dependency edges — see the table below
-children: []                        # DERIVED — tool-refreshed from children's parent keys; do not hand-edit
-target: 2026-Q2                 # feature | epic — optional otherwise
-owner: pat                      # populate when in-progress
-opened: 2026-04-21
-updated: 2026-05-03
-related_tickets: []
-related_prs: []
-resolved_in: ""                 # required when resolved
-superseded_by: ""               # required when superseded
-mitigation: ""                  # required when mitigated
-rationale: ""                   # required when wontfix
-tags: [location, infrastructure]
----
+```text
+work/<release>
+work/<release>/children/<epic>
+work/<release>/children/<epic>/children/<feature>
 ```
 
-Each `depends_on` entry is an **edge**. A bare slug string is accepted as legacy
-shorthand for the defaults, but pages are rewritten to the mapping form on the
-next write:
+`Release` is root-only. `Release`, `Epic`, and `Feature` may own a `children/`
+lane; `Bug`, `TechDebt`, `TestGap`, and `Spike` are leaves. Every item owns the
+directory beside its page. Managed artifacts live under its `references/`
+directory: `00-decisions.md`, `01-design.md`, `02-plan.md`,
+`03-execute-results.md`, `03-execute-transcript.jsonl`, and
+`04-finish-results.md`. Each lane has its own `index.md` and may have a local
+`_archive/`. Physical placement defines ancestry; no `parent` or `children`
+frontmatter aliases exist.
 
 ```yaml
+---
+type: Feature
+title: Path-native filing
+description: File and route by permanent path.
+status: stable
+work_status: accepted
+phase: execute
+effort: medium
+blast_radius: package
+affects:
+  - packages/work-tracker-okf
 depends_on:
-  - slug: 2026-08-11-epic-feature-phase-granular-dependency-gating
+  - path: work/release-cutover/children/epic-migration/children/feature-parser
     blocks: execute
     needs: resolved
-  - slug: 2026-08-11-epic-feature-reconciling-spec-mode-routing
-    blocks: execute
-    needs: plan          # build against its written plan, not its merge
+opened: 2026-08-23
+updated: 2026-08-23
+owner: pat
+sources:
+  - id: design
+    resource: /work/release-cutover/children/epic-filing/children/feature-path-native/references/01-design.md
+  - id: plan
+    resource: /work/release-cutover/children/epic-filing/children/feature-path-native/references/02-plan.md
+---
 ```
 
-| Key | Values | Default | Meaning |
-|---|---|---|---|
-| `slug` | any work-item slug, active or archived | required | the dependency |
-| `blocks` | `design` \| `plan` \| `execute` \| `finish` | `execute` | gates this phase **and every later one** |
-| `needs` | `design` \| `plan` \| `execute` \| `resolved` | `resolved` | this phase of the dependency must be **complete** |
+Every `depends_on` entry is a complete mapping. `path` names any active or
+archived canonical item; `blocks` is `design | plan | execute | finish`; `needs`
+is `design | plan | execute | finish | resolved`. The CLI form is equally
+explicit: `--dep path=<canonical>,blocks=<phase>,needs=<phase>`.
 
-`needs` means *complete*, not *entered*. `phase` is stamped at dispatch, so an
-item reading `phase: plan` is currently being planned and its `plan_doc` does
-not exist yet — `needs: plan` is satisfied at `phase: execute`. Every blocker
-message names both the required state and the observed one, so the rule never
-has to be recalled from memory. There is no `needs: finish`: that state is
-`phase: done, status: resolved`, which `resolved` already names.
+The plan is the `## Plan` body table. `sources[]` registers owned artifacts by
+filename-derived id; `resource` is root-absolute within the OKF bundle.
 
-`children` is a derived, tool-refreshed projection maintained by `gw work regen-index` (which every filing/advance/archive runs): it lists this item's children — active *and* archived, sorted by `(opened, slug)` — and is omitted when empty. Hand-edits are overwritten; to detach a child, delete the *child's* `parent:` key and regen. Parents may be epics or features; feature children keep plain `<kind>-…` slugs (the `epic-<kind>-` prefix stays epic-only).
-
-The committed plan does **not** live in frontmatter — it's a markdown table under `## Plan` in the body. See [Body-table conventions](#body-table-conventions) below.
-
-The lifecycle lint rules (`accepted-without-plan`, `stuck-open`, `done-when-missing`, etc.) and the `<workspace>/wiki/work-index.json` sidecar generator live in **`graph-works`** (work_layer group). `gw` creates the `work/` directory (nested under `wiki/`). See `references/lint-workflow.md` for what lives where.
-
-#### The `work/_archive/` sub-namespace
-
-Items that have reached a terminal status (`resolved`, `wontfix`,
-`superseded`) may be moved to
-`<workspace>/work/_archive/<slug>.md`. They retain their full schema —
-same frontmatter, same body convention, same wiki-page semantics —
-but are excluded from:
-
-- base structural lint (`/graph-works:lint`)
-- the work-tracker sidecar (`<workspace>/wiki/work-index.json`)
-- consumer commands that read the sidecar
-
-Items under `_archive/` must already be in a terminal status; the
-archive command (`/graph-works:archive`) enforces this on entry.
-Restoring is a `git mv` from `_archive/` back to `work/` plus
-`/graph-works:regen-index`.
+Archive commands move an item to the `_archive/` lane owned by its current
+parent (or `work/_archive/` for roots), preserving its owned directory and
+repairing path references. Indexes are Markdown filesystem projections
+reconciled by `gw work regen-index`; there is no JSON sidecar.
 
 ### Source pages
 
@@ -268,7 +260,7 @@ Restoring is a `git mv` from `_archive/` back to `work/` plus
 title: "Auth Migration Spec"
 category: source
 summary: Spec for moving from session tokens to JWTs; addresses compliance flags
-source_path: raw/specs/auth-migration.md   # raw/<...> for staged sources, repo-relative (e.g. docs/auth.md) for in-repo docs
+source_path: sources/references/auth-migration.md   # ingest's copy destination: sources/references/<YYYY-MM>-<slug>.<ext>, always — no in-repo-doc exception
 source_type: spec                # spec | article | pr | ticket | transcript | example | doc | note
 source_date: 2026-04-01
 last_sync_commit:                # set only for in-repo docs (source_type: doc) — full SHA at last ingest, used by /graph-works:lint to detect changes
@@ -318,60 +310,53 @@ updated: 2026-04-20
 ## Naming conventions
 
 - **Filenames:** `kebab-case.md` — lowercase, hyphens, no spaces
-- **Entity pages** live flat in `entities/` as `<prefix>_<name>[__<6hex>].md`. The `__<6hex>` SHA suffix is appended only on collision. Prefix per kind:
+- **Entity pages** are nested under `repositories/<repo>/`, one folder per kind, no
+  filename prefix:
 
-  | Kind | Prefix | Example |
+  | Kind | Path | Example |
   |---|---|---|
-  | `repository` | `repo_` | `repo_my-monorepo.md` |
-  | `package` | `pkg_` | `pkg_common-aws-node-ts.md` |
-  | `app` | `app_` | `app_web-next-ts.md` |
-  | `agent_plugin` | `agent-plugin_` | `agent-plugin_graph-works.md` |
-  | `dependency` | `dep_` | `dep_react.md` |
-  | `test_suite` (unit) | `unit_tests_` | `unit_tests_common-aws-node-ts.md` |
-  | `test_suite` (integration) | `int_tests_` | `int_tests_common-aws-node-ts.md` |
-  | `test_suite` (other) | `tests_` | `tests_common-aws-node-ts.md` |
+  | `repository` | `repositories/<repo>/repository.md` | `repositories/my-monorepo/repository.md` |
+  | `package` | `repositories/<repo>/packages/<name>.md` | `repositories/my-monorepo/packages/common-aws-node-ts.md` |
+  | `app` | `repositories/<repo>/apps/<name>.md` | `repositories/my-monorepo/apps/web-next-ts.md` |
+  | `agent_plugin` | `repositories/<repo>/agent-plugins/<name>.md` | `repositories/my-monorepo/agent-plugins/graph-works.md` |
+  | `dependency` | `dependencies/<ecosystem>/<name>.md` (sibling root, not nested) | `dependencies/npm/react.md` |
+  | `test_suite` | `repositories/<repo>/test-suites/<name>.md` | `repositories/my-monorepo/test-suites/common-aws-node-ts.md` |
 
 - **Concepts:** `concepts/<concept-slug>.md` — e.g. `concepts/global-context.md`. Comparisons live here too: `concepts/<a>-vs-<b>.md` for two-way, `concepts/<topic>-options.md` for n-way.
 - **Sources:** `sources/<YYYY-MM>-<short-slug>.md` — e.g. `sources/2026-04-auth-migration-spec.md`
 - **ADRs:** `adrs/<NNNN>-<slug>.md` — e.g. `adrs/0012-move-to-esm.md`. Zero-padded ID, monotonically increasing.
 - **Architecture syntheses:** `concepts/<topic>.md` with `kind: architecture` — e.g. `concepts/request-flow.md`
-- **Dependencies:** `entities/dep_<package-name>.md` — use the registry name (`dep_react.md`, `dep_react-native-maps.md`). For scoped npm packages, replace `/` with `__` (`dep_@tanstack__react-query.md`). Service pages use a slug derived from the service name (`dep_mongodb-atlas.md`).
-- **Work:** `work/<YYYY-MM-DD>-<kind>-<w1>-<w2>-<w3>-<w4>.md` (`epic-<kind>` prefix for epic children) — e.g. `work/2026-07-11-feature-shorten-work-item-slugs.md`.
+- **Dependencies:** `dependencies/<ecosystem>/<name>.md` — use the registry name (`dependencies/npm/react.md`, `dependencies/npm/react-native-maps.md`). For scoped npm packages, replace `/` with `__` (`dependencies/npm/@tanstack__react-query.md`). Service pages use a slug derived from the service name, under the `dependencies/` root (`dependencies/mongodb-atlas.md`).
+- **Work:** `<work-path>.md`, where `<work-path>` is an extensionless canonical
+  path such as `work/release-cutover/children/epic-migration/children/feature-parser`.
+  Each basename is stable kebab-case; dates are lifecycle metadata, not identity.
 
 ## Taxonomies
 
 The categorical vocabularies that frontmatter fields draw from. These apply across multiple categories (mainly `work`); per-category enums (e.g. ADR `status`, dependency `kind`) live with the category above.
 
-### `kind` (work)
+### `type` (work)
 
-Eight values, two origins:
+Seven PascalCase values define placement and workflow behavior:
 
-| Kind | Origin | Typical shape |
+| Type | Placement | Typical shape |
 |---|---|---|
-| `bug` | discovered | symptom + root cause + fix |
-| `tech-debt` | discovered | suboptimal pattern + refactor target |
-| `test-gap` | discovered | missing coverage + test plan |
-| `security` | discovered | exposure + remediation |
-| `perf` | discovered or measured | regression + budget + fix |
-| `feature` | intended | user-driven capability + scope |
-| `epic` | intended | multi-feature effort spanning weeks/quarters |
-| `spike` | intended | time-boxed exploration with a question |
+| `Release` | root only; may own children | a dated delivery boundary containing Epics |
+| `Epic` | root or child; may own children | a multi-feature effort |
+| `Feature` | root or child; may own children | a user-driven capability |
+| `Bug` | leaf | symptom, diagnosis, and fix |
+| `TechDebt` | leaf | suboptimal pattern and refactor target |
+| `TestGap` | leaf | missing coverage and test plan |
+| `Spike` | leaf | time-boxed exploration with a question |
 
-Schema/structure problems are `kind: bug` + `tag: data-model`. Wiki↔code drift filed by lint is `kind: tech-debt` + `tag: doc-drift`. Lifecycle and required fields are identical to the underlying kind; the discriminating live in tags rather than spawning new kinds.
+Security and performance are contributed tags (`security`, `perf`) on the
+appropriate work type, not additional types. Schema/structure problems are
+normally `type: Bug` plus a `data-model` tag; wiki-to-code drift is normally
+`type: TechDebt` plus a `doc-drift` tag.
 
 ### `kind` (dependency)
 
 Two values: `package | service`. Frontmatter shape diverges per kind — see [Dependency pages](#dependency-pages) above.
-
-### Severity (work)
-
-Values: `low | medium | high | critical`.
-
-| Bucket | Kinds | Lint |
-|---|---|---|
-| Common | `bug`, `security`, `perf` | severity expected, not enforced |
-| Possible | `tech-debt`, `test-gap` | severity allowed when known |
-| Disallowed | `feature`, `epic`, `spike` | `severity-on-non-bug` (info) |
 
 ### Effort (work)
 
@@ -389,15 +374,16 @@ Anchors are advisory. Missing field = unknown; no `unknown` value.
 
 Blast-radius values: `file | package | domain | system`. **Practical impact, not source-code locality** — a one-line change to a shared library used by every domain is `system` even though the source is in one package.
 
-### Per-kind field applicability (work)
+### Per-type field applicability (work)
 
 | Field | Required for | Allowed for | Disallowed for |
 |---|---|---|---|
-| `severity` | none | `bug`, `security`, `perf`, `tech-debt`, `test-gap` | `feature`, `epic`, `spike` |
-| `target` | none | all kinds — only meaningful for `feature`, `epic` | — |
-| `owner` | none | all kinds — populated when `in-progress` | — |
-| `effort` | none | all kinds | — |
-| `blast_radius` | none | all kinds | — |
+| `target` | none | all types — usually meaningful for `Release`, `Epic`, and `Feature` | — |
+| `target_date` | none | `Release` | every other type |
+| `version` | none | `Release` | every other type |
+| `owner` | every `in-progress` item | all types | — |
+| `effort` | every stable document | all types | — |
+| `blast_radius` | none | all types | — |
 
 State-conditional fields (`resolved_in`, `mitigation`, `superseded_by`, `rationale`) are populated only in their corresponding state. Lint enforces.
 
@@ -409,9 +395,9 @@ Seven states. Replaces the two pre-existing enums (`open|investigating|mitigated
 |---|---|---|
 | `open` | filed; no committed plan | — |
 | `accepted` | plan committed; `## Plan` table populated; ready to start | `## Plan` non-empty |
-| `in-progress` | someone is implementing | `pr` or `branch` reference |
-| `mitigated` | symptom hidden, root cause persists (mostly bug/security/perf) | `mitigation` |
-| `resolved` | done | `resolved_in` |
+| `in-progress` | someone is implementing | `owner` |
+| `mitigated` | symptom hidden, root cause persists | `mitigation` |
+| `resolved` | done | `resolved_in` except for an Epic resolved by its children gate |
 | `wontfix` | closed without action | `rationale` |
 | `superseded` | replaced by another work item | `superseded_by` |
 
@@ -433,7 +419,7 @@ Three categories use markdown tables in the body for structured rows. Header row
 
 - Header row exact: `| Action | Done when | Rationale |`.
 - One row per step. Order is significant.
-- `Done when` is required (lint `warn`) for `kind: feature` and `kind: epic`; optional otherwise.
+- `Done when` is required (lint `warn`) for `type: Feature` and `type: Epic`; optional otherwise.
 - Pipes inside cell content escape as `\|`.
 - File paths and `path:line` references in the `Action` cell are checked for existence by lint; line numbers are advisory.
 
@@ -442,12 +428,12 @@ Three categories use markdown tables in the body for structured rows. Header row
 Use Obsidian wikilinks. Three forms:
 
 ```
-[[entities/pkg_common-aws-node-ts]]                         # full path to entity page
-[[entities/pkg_common-aws-node-ts|the AWS helpers package]] # custom display
-[[pkg_common-aws-node-ts]]                                  # stem — resolves if unique
+[[repositories/<repo>/packages/common-aws-node-ts.md]]                         # full path to entity page
+[[repositories/<repo>/packages/common-aws-node-ts.md|the AWS helpers package]] # custom display
+[[common-aws-node-ts]]                                                          # stem — resolves if unique
 ```
 
-For entity pages (packages, apps, etc.), prefer stem links when the name is unambiguous; use the full `entities/<prefix>_<name>` path only when disambiguation is needed. Use full paths for non-entity pages (concepts, sources, ADRs, etc.).
+For entity pages (packages, apps, etc.), prefer stem links when the name is unambiguous; use the full `repositories/<repo>/<kind-folder>/<name>.md` path only when disambiguation is needed. Use full paths for non-entity pages (concepts, sources, ADRs, etc.).
 
 Code references — when citing actual code — use a plain code reference (Obsidian won't wikilink them but it's searchable):
 
@@ -457,7 +443,7 @@ See `packages/common-aws-node-ts/src/handlers/baseApiHandler.ts:42`
 
 ## Cross-reference rules
 
-- **Every package mentioned on an entity or concept page must be a wikilink** to `entities/<prefix>_<name>`.
+- **Every package mentioned on an entity or concept page must be a wikilink** to `repositories/<repo>/packages/<name>.md`.
 - **Every ADR referenced in entity/concept pages must be a wikilink** to `adrs/<id>-<slug>`.
 - **Every claim on an entity page cites** either a source page (`[[sources/xxx]]`) or a code path (backticked, with file:line).
 - **Contradictions get flagged inline** with a `> ⚠️ Contradiction:` callout naming the conflicting sources or code paths.
@@ -465,22 +451,24 @@ See `packages/common-aws-node-ts/src/handlers/baseApiHandler.ts:42`
 
 ## Index discipline
 
-`<workspace>/wiki/index.md` is regenerated by command-layer scan/ingest flows. For manual plugin edits, update the relevant section inline.
+`<workspace>/okf/index.md` is regenerated by command-layer scan/ingest flows. For manual plugin edits, update the relevant section inline.
 
 The index groups pages by category, alphabetized by title. Each entry is one line with a wikilink, summary, and optional metadata.
 
 ## Log discipline
 
-`<workspace>/wiki/log.md` is append-only. Every entry starts with a standardized header so `grep "^## \[" log.md | tail -5` returns the last 5 entries.
+`<workspace>/okf/log.md` is append-only. Every entry starts with a standardized header so `grep "^## \[" log.md | tail -5` returns the last 5 entries.
 
 ```
 ## [2026-04-20] scan | detected 3 new packages
-Added entities/pkg_timeline-data-node-ts.md, entities/pkg_timeline-domain-ts.md,
-entities/pkg_timeline-native-ts.md. No renames or deletions.
+Added repositories/my-monorepo/packages/timeline-data-node-ts.md,
+repositories/my-monorepo/packages/timeline-domain-ts.md,
+repositories/my-monorepo/packages/timeline-native-ts.md. No renames or deletions.
 
 ## [2026-04-20] ingest | Auth Migration Spec
 Added sources/2026-04-auth-migration-spec.md. Updated concepts/global-context,
-entities/pkg_shared-aws-node-ts.md, entities/pkg_shared-native-ts.md,
+repositories/my-monorepo/packages/shared-aws-node-ts.md,
+repositories/my-monorepo/packages/shared-native-ts.md,
 concepts/request-flow, adrs/0014-jwt-sessions (new). Flagged contradiction
 with concepts/global-context on session shape.
 ```

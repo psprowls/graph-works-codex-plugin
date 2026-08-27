@@ -95,6 +95,106 @@ rc=$?
 assert_eq "no git repo anywhere: empty stdout" "" "$out"
 assert_eq "no git repo anywhere: exit 0" "0" "$rc"
 
+# --- (e) parity with graph_works_core.workspace.discovery.resolve_root ----
+#
+# This script is a second implementation of a discovery chain that also exists
+# in Python, and two implementations of one rule drift. The matrix below is the
+# price of having them: it pins the relationship between the two rather than
+# testing either alone.
+#
+# The relationship is not equality, because the two answer slightly different
+# questions. `resolve_root` returns the *prospective* root and never checks
+# whether it exists; this script declines to name a directory that is not
+# there. So:
+#
+#   - when this script emits a path, `resolve_root` returns the same path;
+#   - when it emits nothing, `resolve_root`'s answer is not a directory.
+#
+# Two documented divergences keep the matrix honest and are excluded from it
+# rather than papered over:
+#
+#   - The single argument is overloaded here — an explicit workspace when it
+#     is marked, a start directory otherwise — where Python takes `workspace`
+#     and `cwd` separately. Each row therefore states which Python parameter
+#     its argument corresponds to.
+#   - `GRAPH_WORKS_DIR` is echoed verbatim here and `expanduser().resolve()`d
+#     in Python. The matrix uses already-absolute, already-resolved values, so
+#     a row that disagrees is real drift and not that.
+#
+# `uv` is a hard requirement, not a conditional skip: this suite runs from the
+# checkout, and a gate that silently skips reports green while covering nothing.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+# Rows: name | bash arg | bash cwd | GRAPH_WORKS_DIR | python workspace= | python cwd=
+PARITY_ROWS=(
+  "env var|||$TMP/envws|$TMP/envws|"
+  "repo with .works||$TMP/proj_b|||$TMP/proj_b"
+  "walk-up from nested cwd||$TMP/proj_b/a/b/c|||$TMP/proj_b/a/b/c"
+  "worktree .git file||$TMP/wt|||$TMP/wt"
+  "start-dir argument|$TMP/proj_b/a/b/c|$TMP|||$TMP/proj_b/a/b/c"
+  "explicit marked workspace|$TMP/explicit|$TMP||$TMP/explicit|"
+  "repo without .works||$TMP/proj_c/deep|||$TMP/proj_c/deep"
+  "nested repo, inner root||$TMP/outer/inner/src|||$TMP/outer/inner/src"
+  ".works is a file||$TMP/proj_f|||$TMP/proj_f"
+  "no repo anywhere||$TMP/bare/dir|||$TMP/bare/dir"
+)
+
+# One uv spin-up for the whole matrix: the rows go in on stdin, one resolved
+# path per row comes back out.
+python_answers=$(
+  for row in "${PARITY_ROWS[@]}"; do
+    IFS='|' read -r _name _arg _cwd _env py_workspace py_cwd <<< "$row"
+    printf '%s\t%s\t%s\n' "$py_workspace" "$py_cwd" "$_env"
+  done | uv run --project "$REPO_ROOT" python -c '
+import sys
+from pathlib import Path
+
+from graph_works_core.workspace.discovery import resolve_root
+
+for line in sys.stdin.read().splitlines():
+    workspace, cwd, env = line.split("\t")
+    environ = {"GRAPH_WORKS_DIR": env} if env else {}
+    print(resolve_root(
+        workspace=workspace or None,
+        cwd=cwd or Path.cwd(),
+        environ=environ,
+    ))
+' 2>/dev/null
+)
+
+if [[ -z "$python_answers" ]]; then
+  fail=$((fail + 1))
+  echo "FAIL - parity: could not run graph_works_core.workspace.discovery.resolve_root"
+  echo "        uv run --project $REPO_ROOT failed; the parity matrix covered nothing"
+else
+  # No mapfile: this suite must run under macOS's bash 3.2.
+  python_paths=()
+  while IFS= read -r answer; do python_paths+=("$answer"); done <<< "$python_answers"
+  index=0
+  for row in "${PARITY_ROWS[@]}"; do
+    IFS='|' read -r name arg cwd env_value _py_workspace _py_cwd <<< "$row"
+    python_path="${python_paths[$index]}"
+    index=$((index + 1))
+
+    if [[ -n "$env_value" ]]; then
+      bash_out="$(cd "$cwd" 2>/dev/null || cd "$TMP"; GRAPH_WORKS_DIR="$env_value" bash "$RESOLVER" ${arg:+"$arg"} 2>/dev/null)"
+    else
+      bash_out="$(cd "${cwd:-$TMP}" && env -u GRAPH_WORKS_DIR bash "$RESOLVER" ${arg:+"$arg"} 2>/dev/null)"
+    fi
+
+    if [[ -n "$bash_out" ]]; then
+      assert_eq "parity ($name): bash path == resolve_root" "$python_path" "$bash_out"
+    elif [[ -d "$python_path" ]]; then
+      fail=$((fail + 1))
+      echo "FAIL - parity ($name): bash declined but resolve_root named a real directory"
+      echo "        resolve_root: [$python_path]"
+    else
+      pass=$((pass + 1))
+      echo "ok   - parity ($name): both decline ($python_path is not a directory)"
+    fi
+  done
+fi
+
 echo "-------------------------------------"
 echo "pass=$pass fail=$fail"
 [[ "$fail" -eq 0 ]]

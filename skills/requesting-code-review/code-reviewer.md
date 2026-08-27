@@ -43,8 +43,6 @@ Subagent (general-purpose):
     verdict counts for nothing. If the diff feels too large for one
     pass, review it in passes yourself and say so in your report.
 
-    [REVIEW_GUIDANCE]
-
     ## What to Check
 
     **Plan alignment:**
@@ -141,7 +139,6 @@ Subagent (general-purpose):
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (plan file path, task text, or requirements)
 - `[BASE_SHA]` — starting commit
 - `[HEAD_SHA]` — ending commit
-- `[REVIEW_GUIDANCE]` — a `## Review guidance` block (diff-scoped, review-role guidance), or empty when recall returns nothing
 
 **Reviewer returns:** Strengths, Issues (Critical / Important / Minor), Recommendations, Assessment
 
