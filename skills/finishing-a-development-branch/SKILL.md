@@ -33,13 +33,15 @@ GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
 # Capture now, while still inside the workspace — Step 5 changes directory
 # before cleanup (Step 6) needs this value
 WORKTREE_PATH=$(git rev-parse --show-toplevel)
+WORKSPACE=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/shared/resolve-workspace.sh" 2>/dev/null)
 ```
 
 This determines which menu to show and how cleanup works:
 
 | State | Menu | Cleanup |
 |-------|------|---------|
-| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 3 options | No worktree to clean up |
+| `GIT_DIR == GIT_COMMON` (normal repo), current branch is **not** the base branch | Standard 3 options | No worktree to clean up |
+| `GIT_DIR == GIT_COMMON` (normal repo), current branch **is** the base branch (on-trunk) | Reduced 2 options (no merge — see Step 3) | No worktree to clean up |
 | `GIT_DIR != GIT_COMMON`, named branch | Standard 3 options | Provenance-based (see Step 6) |
 | `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 2 options (no merge) | Externally managed — leave in place |
 
@@ -50,7 +52,37 @@ plan, the conversation, or the branch's upstream. If it is not already
 known, ask: "This branch split from <your best guess> - is that correct?"
 Confirm before merging: merging into the wrong base is expensive to undo.
 
+**On-trunk check (normal repo only, `GIT_DIR == GIT_COMMON`):** once the
+base branch is known, compare it against the current branch
+(`git branch --show-current`). If they're the same, this session's commits
+already sit on the base branch — there is nothing to merge, so drop
+straight to Step 4's on-trunk menu. This check is scoped to the normal-repo
+case, not because a worktree can never be on the base branch by
+construction — a shared epic worktree is, which is exactly why
+`finishing-relay` needs its own trunk case — but because that configuration
+only arises under auto-drive, which routes the finish stage to
+`finishing-relay` rather than here. An attended finish reaching this skill
+from a worktree is on a feature branch whose base is elsewhere.
+
 ## Step 4: Present Options
+
+**On-trunk (normal repo, current branch is the base branch) — present
+exactly these 2 options:**
+
+```
+Implementation complete. This session's commits already sit on <base-branch> —
+there is nothing to merge. What would you like to do?
+
+1. Push as new branch and create a Pull Request
+2. Leave it as-is (nothing further needed)
+
+Which option?
+```
+
+Option 1 here is Step 5's Option 2 (Push and Create PR), using its
+detached-HEAD form (`git push origin HEAD:refs/heads/<new-branch>`) since
+there is no existing feature branch to push. Option 2 is Step 5's Option 3
+(Keep As-Is) — no new execution prose, only a different menu.
 
 **Normal repo and named-branch worktree — present exactly these 3 options:**
 
@@ -166,8 +198,8 @@ Step 2, from before that directory change.
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
-**If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** Superpowers
-created this worktree — we own cleanup:
+**If `WORKTREE_PATH` is under `.worktrees/`, `worktrees/`, or
+`<workspace>/worktrees/` (when a workspace resolves):** we own cleanup:
 
 ```bash
 git worktree remove "$WORKTREE_PATH"
@@ -208,6 +240,8 @@ place. If your platform provides a workspace-exit tool, use it.
 | 2. Create PR | - | yes | yes | - |
 | 3. Keep as-is | - | - | yes | - |
 | Discard (explicit request only) | - | - | - | yes (force) |
+| On-trunk: create PR | - | yes | n/a (normal repo) | - |
+| On-trunk: leave as-is | - | - | n/a (normal repo) | - |
 
 ## Common Rationalizations
 
@@ -218,7 +252,7 @@ place. If your platform provides a workspace-exit tool, use it.
 | "They seem done with this feature — I'll offer to discard it" | The menu is complete as written. Discard happens only when your human partner asks for it in so many words. |
 | "'Yeah, get rid of it' counts as confirmation" | Only the typed word `discard` authorizes deletion. |
 | "The PR is up, so the worktree is clutter now" | PR feedback gets fixed in that worktree. It stays until the work lands. |
-| "This other worktree looks stale — I'll clean it too" | Clean up only worktrees under `.worktrees/` or `worktrees/`. Everything else belongs to the host. |
+| "This other worktree looks stale — I'll clean it too" | Clean up only worktrees under `.worktrees/`, `worktrees/`, or `<workspace>/worktrees/`. Everything else belongs to the host. |
 | "Removal refused — `--force` is just finishing the cleanup" | The refusal means files exist only in that worktree. `--force` destroys them permanently. Show your human partner and ask. |
 | "The merged-result failure is probably flaky" | A failing merged result stops everything. Branch and worktree stay put while you investigate. |
 | "The base branch is obviously main" | Confirm the fork point or ask. Merging into the wrong base is expensive to undo. |

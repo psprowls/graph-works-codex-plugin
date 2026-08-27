@@ -121,15 +121,12 @@ digraph process {
 }
 ```
 
-## Step 0: Code-Change Gate
-
-**REQUIRED SUB-SKILL:** Use `graph-works:using-git-worktrees` before dispatching any subagent that writes code. It confirms a direct implement directive authorizes the change and that the work is isolated in a worktree. Run it once, here — every subagent you dispatch inherits the isolated workspace.
-
 ## Setup
 
-That gate above already created or verified the isolated workspace this
-work happens in. Never start implementation on a main/master branch
-without your human partner's explicit consent.
+Ensure the work happens in an isolated workspace: use
+graph-works:using-git-worktrees to create one or verify the existing one.
+Never start implementation on a main/master branch without your human
+partner's explicit consent.
 
 Conversation memory does not survive compaction. In real sessions,
 controllers that lost their place have re-dispatched entire completed task
