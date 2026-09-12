@@ -1,10 +1,5 @@
 # Scan Workflow
 
-> **Substrate ownership.** This document describes behavior that the graph-works rebuild is
-> re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`feature-epic-feature-scan-pipeline-vertical`](/work/_archive/epic-graph-works-core/children/_archive/feature-epic-feature-scan-pipeline-vertical.md) and is re-authored there, not here.
-> Treat a disagreement between this page and that item as this page being stale.
-
 ## Purpose
 
 Keep `repositories/<repo>/` (and `dependencies/`) in sync with the code graph. The scan builds the graph, renders one page per admitted entity, then refreshes model-maintained prose (`## Narrative`, `## Purpose`, `## Public API`, file/dir descriptions, overview) via a diff-gated Claude subagent fan-out: an entity is refreshed only when the commit range `last_updated_commit..HEAD` touches its files. A bare invocation runs the mechanical write only.
@@ -43,7 +38,7 @@ Already done by the script (`index.md`, per-folder sub-indexes). No separate ste
 Already done by the script.
 
 ### 6. Report back
-Bulleted wikilinks; suggest `/graph-works:lint` and `/graph-works:ingest` to flesh out narratives.
+Bulleted wikilinks; suggest `/gw:lint` and `/gw:ingest` to flesh out narratives.
 
 ## Frontmatter contract
 
@@ -51,7 +46,7 @@ Data keys (`DATA_KEYS`, replaced every scan): `uri`, `kind`, `graph_name`, `last
 
 Provenance keys (scanner-stamped but deliberately NOT in `DATA_KEYS` — preserved verbatim across re-scan):
 - `last_updated_commit` — HEAD at which prose sections (`## Narrative`, `## Purpose`, etc.) were last refreshed; gates the diff-driven prose-refresh pass.
-- `drift_propagated_commit` — the entity's `last_updated_commit` value at which M4's drift producer last proposed against curated pages backlinking it; gates the M4 cross-page drift pass (proposal ledger) and keeps repeat runs idempotent.
+- `drift_propagated_commit` — the entity's `last_updated_commit` value at which the drift producer last proposed against curated pages backlinking it; gates the cross-page drift pass (proposal ledger) and keeps repeat runs idempotent.
 
 The state gate (`last_updated_commit` stamping on scan/ingest) is configurable per-workspace via the `state_gate:` block in `<root>/workspace.yaml` (`enabled` + allowed `branches`); absent config gates on a clean `main`. See the workspace-io README for the schema.
 
@@ -61,7 +56,7 @@ Artifacts live under `<root>/state/` across the emit/apply boundary:
 
 **`worklist.json`** — written by `--emit-worklist`, consumed by `--apply-worklist` / `--results-dir`:
 - `prose_tasks` — one diff-gated `ProseRefreshTask` per stale entity: `trigger` (`first_fill` | `diff`), the scoped `diff`, `changed_files`, the current `prose_sections`, `file_map_rows`, `graph_context`, and `owning_short_head`.
-- `propagate_tasks` — cross-page drift propagation tasks (M4).
+- `propagate_tasks` — cross-page drift propagation tasks.
 - `short_head` — abbreviated HEAD SHA at emit time; passed as `--short-head` to apply so anchors are stamped to the correct commit.
 - `schema: 2`.
 

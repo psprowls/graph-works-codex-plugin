@@ -1,20 +1,15 @@
 # Proposal Disposition Workflow
 
-> **Substrate ownership.** This document describes behavior that the graph-works rebuild is
-> re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`feature-epic-feature-ingest-pipeline-vertical`](/work/_archive/epic-graph-works-core/children/_archive/feature-epic-feature-ingest-pipeline-vertical.md) and is re-authored there, not here.
-> Treat a disagreement between this page and that item as this page being stale.
-
 How to review and dispose of curated-page **proposals** — the ADR/concept notes the
-ingest pipeline (and M4 drift producer) drop into `<wiki>/proposals/`. Each note is a
+ingest pipeline and the cross-page drift producer drop into `<workspace>/okf/proposals/`. Each note is a
 review artifact, not a finished page.
 
 ## The one fact that changes everything
 
 **`gw wiki proposal approve` does NOT write the wiki page. It only flips the note's
-`status` frontmatter to `approved`.** The "deferred creation consumer" named in
-`wiki_io/proposals.py` was never built. *You* author the destination page — and the
-efficient way is to **fan out one subagent per page**, in parallel.
+`status` frontmatter to `approved`.** Nothing downstream consumes that flip to
+create pages. *You* author the destination page — and the efficient way is to
+**fan out one subagent per page**, in parallel.
 
 Do not rediscover this by grepping the source every time. Approve = bookkeeping flip.
 Authoring = a separate step you drive.
@@ -30,18 +25,18 @@ proposed ──review──> approve ──author page(s) via subagents──> s
 edits to the body are pointless until a human decides. Once status leaves `proposed`
 (`approved`/`rejected`/`created`), the body is frozen and `upsert_proposal` never stomps
 it. `created` is the real terminal "page was authored" marker — it's what the archive
-sweep and the historical `_archive/` notes use, **not** `approved`.
+sweep and the notes under `_archive/` use, **not** `approved`.
 
 ## Quick reference
 
 | Action | Command (set `export GRAPH_WORKS_DIR=<workspace>` first) |
 |---|---|
-| List open proposals | `uv run --package graph-works-cli gw wiki proposals` |
+| List open proposals | `gw wiki proposals` |
 | Full records (origins, evidence) | `gw wiki proposals --json` |
 | Approve (flip status only) | `gw wiki proposal approve <slug>` |
 | Reject (preserve, won't re-propose) | `gw wiki proposal reject <slug>` |
 | Set `created` (no CLI) | edit the note's `status: approved` → `status: created` |
-| Regenerate indexes | `update_index` one-liner (below) |
+| Regenerate indexes | `gw wiki index` |
 | Archive spent notes | `gw wiki archive --dry-run` then `gw wiki archive` |
 | Verify | `gw wiki lint` |
 
@@ -81,7 +76,7 @@ Destination naming, from the note's `kind` / `target_slug` / `mode`:
 
 Omit the `tokens:` key (stamped later by `gw util tokens`). Write real prose grounded in
 the note's evidence + source — never a bullet dump, never invented facts. Cite the source
-as `[[sources/<ref>]]` and wikilink only `[[entities/…]]` pages you've verified exist.
+as `[<ref>](/sources/<ref>.md)` and link only pages under their real per-type lane (e.g. `/repositories/<repo>/packages/<name>.md`) that you've verified exist.
 
 Assign numbers and supersession links **centrally before dispatch** (you, the orchestrator,
 own cross-page identity); give each subagent its exact filename + any supersedes link so
@@ -100,22 +95,22 @@ Wire **both** directions and mark the old page yourself (a subagent only sees it
 
 ### 4. Regenerate indexes
 
-New pages won't appear in `index.md` / `adrs/index.md` / `concepts/index.md` until indexes
-rebuild. There is **no `gw wiki index` command** — `update_index` is only auto-called inside
-ingest/scan. Call it directly (graph-independent, pure frontmatter scan):
+New pages won't appear in `index.md` / `adrs/index.md` / `concepts/index.md` until the
+indexes are reconciled. Run it directly (graph-independent, pure frontmatter scan):
 
 ```bash
-uv run --package graph-works-core python -c "from pathlib import Path; from wiki_io.update_index import update_index; update_index(Path('$GRAPH_WORKS_DIR/wiki')); print('ok')"
+gw wiki index
 ```
 
-(Runs in this `uv` workspace; an installed/`uv tool` user without the workspace checked out would instead re-run an ingest/scan to refresh indexes.) Optionally run `gw util tokens` afterward to stamp the `tokens:` keys you omitted.
+It prints each index it rewrote, or `nothing to do`. Optionally run `gw util tokens`
+afterward to stamp the `tokens:` keys you omitted.
 
 ### 5. Verify and archive
 
 ```bash
-uv run --package graph-works-cli gw wiki lint            # 0 broken links / orphans / index drift
-uv run --package graph-works-cli gw wiki archive --dry-run   # preview: sweeps created/approved/rejected notes
-uv run --package graph-works-cli gw wiki archive             # moves spent notes to proposals/_archive/
+gw wiki lint            # 0 broken links / orphans / index drift
+gw wiki archive --dry-run   # preview: sweeps created/approved/rejected notes
+gw wiki archive             # moves spent notes to proposals/_archive/
 ```
 
 Optionally append a `gw util log` entry to mirror ingest. Leave commit/push to the user.
@@ -127,7 +122,7 @@ Optionally append a `gw util log` entry to mirror ingest. Leave commit/push to t
 | "Approve created the ADR page" | No. Approve flips status only. You author the page. |
 | Authoring pages one at a time | Fan out — one subagent per page, dispatched in a single message. |
 | Leaving notes at `approved` after writing pages | Flip to `created` — that's the authored marker the archive sweep expects. |
-| Hand-editing `index.md` | Run the `update_index` one-liner; hand edits drift. |
+| Hand-editing `index.md` | Run `gw wiki index`; hand edits drift. |
 | Letting a subagent pick the ADR number / supersedes link | Orchestrator assigns numbers + cross-links centrally before dispatch. |
 | Approving in bulk without ground-truth check | Verify each decision exists in code/sources first; disposition is the user's call. |
 | Editing a `proposed` note's body | Pointless — regenerated from `origins[]` every ingest. Decide first. |

@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: Use when driving a work item through its development pipeline — runs `gw work next` to compute the stage, dispatches the stage skill (brainstorming, reconciling-spec, systematic-debugging, writing-plans, subagent-driven-development, test-driven-development, finishing-a-development-branch), verifies the artifact, and advances the item with `gw work advance`. One stage per invocation; clear context between stages.
+description: Use when driving a work item through its development pipeline — runs `gw work next` to compute the stage, dispatches the stage skill (brainstorming, reconciling-spec, epic-design, systematic-debugging, writing-plans, planning-epics, subagent-driven-development, test-driven-development, finishing-a-development-branch), verifies the artifact, and advances the item with `gw work advance`. One stage per invocation; clear context between stages. Pass `--descend` to auto-continue into the next actionable child leaf when an epic is waiting on children.
 ---
 
 # Work Item Workflow
@@ -73,7 +73,7 @@ read are unchanged from `gw work next`.
   through the normal steps — dispatch transition, stage skill, advance — all
   against the leaf path. If the descend itself reports a `--descend:` blocker,
   or no `--descend` was requested, report the blocker, list the open children
-  from `child_rollup.open_paths` suggesting `/graph-works:next <child-path>` for
+  from `child_rollup.open_paths` suggesting `/gw:workflow <child-path>` for
   each, and **stop** (nothing to advance).
 - Otherwise announce the dispatch: item title, kind, phase, and the stage skill
   from `action.skill`.
@@ -88,13 +88,28 @@ which transitions happen at dispatch time.
 
 ### 3. Dispatch the stage skill
 
-Invoke the stage skill named by `action.skill` via the Skill tool (namespaced
-`graph-works:<skill>`), prepending a work-item brief:
+Invoke the stage skill named by `action.skill` via the Skill tool, using the
+value **verbatim**, prepending a work-item brief.
 
-**Auto-drive relay override.** If `action.skill` is
-`finishing-a-development-branch` **and** the dispatch prompt that launched
+`action.skill` is the complete name. A qualified `<plugin>:<skill>` is passed
+as-is; a bare name is passed as-is and resolves to a user-level or repo-local
+skill. **Never prepend a namespace** — there is no implicit plugin, and
+prefixing a qualified name produces a name that resolves to nothing.
+
+**Preflight — confirm the skill resolves.** Before invoking, check that the
+name you are about to invoke — `action.skill`, used verbatim — appears in
+this harness's available-skills listing. If it does not, **stop** and report
+that name, and, when it is qualified (`<plugin>:<skill>`), the plugin that is
+missing. Do not substitute a similar skill, and do not perform the stage
+yourself. This applies to bare and qualified names alike: a bare name is a
+valid configured value, so checking only qualified ones would leave exactly
+that case unguarded.
+
+**Auto-drive relay override.** If `action.skill`'s **last segment** — the part
+after the colon in a qualified `superpowers:finishing-a-development-branch` — is
+`finishing-a-development-branch`, **and** the dispatch prompt that launched
 this session contains an `Auto-drive context:` line, dispatch
-`graph-works:finishing-relay` instead of `finishing-a-development-branch` —
+`gw:finishing-relay` instead of the configured skill —
 the merge target is already embedded in that same line, so no extra
 forwarding is needed beyond the standard work-item brief below. This
 override needs no STOP line: `finishing-relay` doesn't self-chain into
@@ -117,24 +132,41 @@ another stage, same as the stock skill it replaces.
 
   Omit this block entirely when `guidance` is empty (guidance skipped or no
   matches). Surface any `guidance_warnings` to the user as plain notes.
-- when the dispatched `action.skill` is a chained-handoff skill, add the
-  matching STOP line so its pipeline-stage guard fires (without it the skill
-  self-chains into the next stage, collapsing two stages into one session):
-  - dispatching `brainstorming` → add: *"STOP after writing the spec — do not
-    invoke writing-plans. This is a single pipeline stage; the workflow skill
-    advances the item."*
-    This prepended work-item brief and STOP line are the canonical "a work item
-    already exists" signal that `brainstorming` keys off of to suppress its
-    standalone auto-file path — no dispatch-logic change is needed here.
-  - dispatching `writing-plans` → add: *"STOP after writing the plan — do not
-    run the Execution Handoff. This is a single pipeline stage; the workflow
-    skill advances the item."*
-  - dispatching `planning-epics` → add: *"STOP after writing the plan artifact and
-    filing the children — do not advance the epic or start a child. This is a
-    single pipeline stage; the workflow skill advances the item."*
-  - `systematic-debugging`, `test-driven-development`,
-    `subagent-driven-development`, and `finishing-a-development-branch` need no
-    STOP line — they do not self-chain into the next stage.
+- **Stage directives (riders).** Look `action.skill` up in the rider table
+  below, keyed on its **last segment** — the part after the colon in a qualified
+  `superpowers:brainstorming`. If a rider exists, open
+  `references/brief-riders.md`, find the matching `## Rider: <name>` section, and
+  inline its **Rider** block into the brief **verbatim**, under a
+  `## Stage directives` heading. A rider is not a summary and not optional: the
+  stage skill is stock and cannot be patched, so the rider text *is* the
+  behavior. If `action.skill` has no rider, add nothing.
+
+  Substitute `<workspace>` with the resolved absolute workspace path and
+  `<work-path>` with the item's canonical path. Where a section documents a
+  **Conditional clause**, apply its condition against the item's frontmatter and
+  omit the clause when the condition does not hold.
+
+  The STOP lines live in this table too. Omitting one lets the stage skill
+  self-chain into the next stage, collapsing two stages into one session.
+
+<!-- rider-table:start -->
+
+| Skill | Stage | Carries |
+|---|---|---|
+| `brainstorming` | design | `--project-dir <workspace>` for the visual companion, plus the spec STOP line |
+| `systematic-debugging` | design (bug) | A self-sufficient stop before stock Phase 4 (implementation) |
+| `writing-plans` | plan | A self-sufficient Execution-Handoff stop |
+| `planning-epics` | plan (epic) | Its STOP line |
+| `subagent-driven-development` | execute | Positive authorization + mandatory isolation |
+| `test-driven-development` | execute | Positive authorization + mandatory isolation |
+| `finishing-a-development-branch` | finish | The on-trunk two-option menu |
+
+<!-- rider-table:end -->
+
+  `reconciling-spec`, `epic-design` and `finishing-relay` have no rider — they
+  are ours and carry their behavior in their own files. Whether any other stage
+  needs a rider is decided by one question, asked of the stock skill: does it
+  run past the stage boundary?
 
 The stock skills honor user-preference path overrides; they stay unmodified.
 
@@ -144,8 +176,8 @@ When `artifact.path` is set, check the file exists after the stage completes.
 The brainstorming and writing-plans skills' own stock locations are already
 the pipeline path — `<work-path>/references/01-design.md` and `02-plan.md`
 respectively — the same path `artifact.path` points to, so the file should
-already be there. If the skill instead wrote elsewhere, move the file (and
-any `.tasks.json` companion) to `artifact.path` and say so.
+already be there. If the skill instead wrote elsewhere, move the file to
+`artifact.path` and say so.
 
 ### 5. Advance
 
@@ -156,7 +188,7 @@ health check, not noise. If the command errors with *effort required*, ask the
 user to size the item as in step 1 — never pick an effort yourself — then retry.
 
 **Relay no-advance outcomes.** If the just-completed stage was
-`graph-works:finishing-relay`, skip this step's own `gw work advance` call
+`gw:finishing-relay`, skip this step's own `gw work advance` call
 entirely for **every** relay outcome, including `merge` — the relay skill
 already settled the item's state: for `merge`, its own R5 step already ran
 `gw work advance <work-path> --resolved-in <ref>`; for `pr`/`hold`/`discard`, R5
@@ -177,13 +209,13 @@ If the advance lands the item at `phase: done` and `work_status: resolved`, run
 ### 6. Hand off
 
 End with: "Phase advanced to `<phase>`. Clear context (`/clear`) and run
-`/graph-works:next <work-path>` to continue."
+`/gw:workflow <work-path>` to continue."
 
-**Relay no-advance hand-off.** For a `graph-works:finishing-relay` stage that
+**Relay no-advance hand-off.** For a `gw:finishing-relay` stage that
 reported `pr`, `hold`, or `discard`, the stock hand-off text above is wrong —
 nothing advanced. Say instead: "`<work-path>` stays at `phase: finish` pending an
 attended pass (relay outcome: `<pr|hold|discard>`). Clear context (`/clear`)
-and run `/graph-works:next <work-path>` when ready to continue attended."
+and run `/gw:workflow <work-path>` when ready to continue attended."
 
 (Items that have reached a terminal state are handled by **Terminal handling**
 below, not this hand-off.)
@@ -199,16 +231,16 @@ context window).
 1. **Ingest the design (resolved only).** If `work_status` is `resolved`, read
    `<workspace>/okf/<work-path>.md` and find the `sources[]` entry with
    `id: design`. If its root-absolute `resource` resolves beneath the OKF
-   bundle, dispatch the ingest skill (`graph-works:ingest`) on that artifact inline; the ingestor runs its own
+   bundle, dispatch the ingest skill (`gw:ingest`) on that artifact inline; the ingestor runs its own
    confirmation dialog and, on success, archives the source and repoints the
    pointer. Skip the ingest (announce "no design to ingest") when `work_status` is
    `wontfix`/`superseded`, when no `design` source exists, or when the resource is already gone
-   (already ingested). Plan-artifact ingest is a deferred future extension —
-   ingest does not yet accept plan-type sources.
+   (already ingested). Ingest accepts design sources only — never hand it a
+   plan artifact.
 
 2. **Offer to archive (any terminal status).** Ask the user "Archive `<work-path>`
-   now?" If yes, run `/graph-works:archive <work-path>`. If no, report that the item
-   stays in `work/` and can be archived later with `/graph-works:archive`.
+   now?" If yes, run `/gw:archive <work-path>`. If no, report that the item
+   stays in `work/` and can be archived later with `/gw:archive`.
 
 ### Detaching a child
 

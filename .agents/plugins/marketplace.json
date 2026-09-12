@@ -1,11 +1,15 @@
 {
-  "name": "superpowers-dev",
+  "name": "graph-works",
   "interface": {
-    "displayName": "Superpowers Dev"
+    "displayName": "Graph Works"
+  },
+  "owner": {
+    "name": "Patrick Sprowls",
+    "url": "https://github.com/psprowls"
   },
   "plugins": [
     {
-      "name": "graph-works",
+      "name": "gw",
       "source": {
         "source": "url",
         "url": "./"

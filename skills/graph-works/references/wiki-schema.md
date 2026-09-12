@@ -1,12 +1,8 @@
 # Wiki Schema
 
-> **Substrate ownership.** `epic-wiki-io-format-layer` (the item this disclaimer used to
-> point at) is `resolved`/`phase: done` — pointing readers there now sends them to closed
-> history, not live truth. If this page and the shipped workspace tree
-> (`<repo>/.works/okf/...`) disagree, treat this page as stale and file (or find) the
-> TechDebt item that tracks the drift; see
-> [[../../../../work/tech-debt-plugin-docs-layout-claims]] for the layout-claim sweep that
-> last corrected this page.
+> **The shipped workspace tree wins.** If this page and the tree `gw bootstrap`
+> actually builds (`<repo>/.works/okf/...`) disagree, this page is wrong: trust the
+> tree, and file a TechDebt item for the drift.
 
 The wiki sits inside a graph-works workspace alongside other workspace-level directories. The LLM must respect the boundaries.
 
@@ -47,7 +43,7 @@ Ingest reads material directly from any filesystem path; there is no staging inb
     ├── .templates/                 # page templates (reference only, not indexed)
     ├── CLAUDE.md                   # wiki schema file for Claude Code
     ├── AGENTS.md                   # same schema for Codex/Cursor/Antigravity
-    └── .cursorrules                # (optional) legacy Cursor
+    └── .cursorrules                # (optional) Cursor
 ```
 
 Entity pages are nested under `repositories/<repo>/`, one folder per kind
@@ -59,7 +55,7 @@ There is no `entities/` folder and no filename-prefix scheme.
 ## Iron rules
 
 1. **The code is the source of truth.** If the wiki disagrees with the code, update the wiki — never the other way around.
-2. **Ingested source material is never edited.** The ingest flow (either `gw ingest`'s `--backend bedrock`/`vercel` pipeline, or the `claude_code`-mode ingestor sub-agent per `/graph-works:ingest`) copies material into `<workspace>/okf/sources/references/` — the original file, wherever it lives, is left untouched. There is no staging inbox and no post-ingest move.
+2. **Ingested source material is never edited.** The ingest flow (either `gw ingest`'s `--backend bedrock`/`vercel` pipeline, or the `claude_code`-mode `ingest` skill per `/gw:ingest`) copies material into `<workspace>/okf/sources/references/` — the original file, wherever it lives, is left untouched. There is no staging inbox and no post-ingest move.
 3. **All curated writes go under `<workspace>/okf/`.** Work items use canonical paths below `<workspace>/okf/work/`. No exceptions.
 4. **Every scan or ingest updates ≥3 files:** the touched page(s), `index.md`, `log.md`. A typical ingest touches 5-15.
 5. **Every wiki page carries YAML frontmatter.** Without frontmatter, index maintenance and `lint_wiki.py` can't see it.
@@ -149,7 +145,7 @@ Concepts are cross-cutting technical patterns — naming conventions, middleware
 
 ### Dependency pages
 
-`/graph-works:scan` writes one graph-derived dependency page per dep into `dependencies/<ecosystem>/<name>.md`, using the scanner-owned shape from `entity-dependency.md` (`uri`, `kind: dependency`, `graph_name`, `last_scan_at`, `ecosystem`, `used_by`, `versions_in_use` — no `category`, `provider`, or `load_bearing`). The `category: dependency` / `kind: package|service` shape below is a **legacy curated-page shape**, hand-authored and **currently checked by nothing** — the `dependency_layer` lint group that once gated it does not exist in graph-works-core, and `gw wiki lint` is a fixed pipeline with no group selection. It does not apply to scanner-generated `dependencies/<ecosystem>/<name>.md` pages. `load_bearing: true` is recorded on these legacy pages but has no reader today; whether the shape survives at all is open in `2026-08-20-tech-debt-revisit-dependency-layer-lint`.
+`/gw:scan` writes one graph-derived dependency page per dep into `dependencies/<ecosystem>/<name>.md`, using the scanner-owned shape from `entity-dependency.md` (`uri`, `kind: dependency`, `graph_name`, `last_scan_at`, `ecosystem`, `used_by`, `versions_in_use` — no `category`, `provider`, or `load_bearing`). The `category: dependency` / `kind: package|service` shape below is a **hand-authored curated-page shape** that no lint check reads — `gw wiki lint` is a fixed pipeline with no group selection, and nothing in it validates these fields. It does not apply to scanner-generated `dependencies/<ecosystem>/<name>.md` pages, and `load_bearing: true` on such a page has no reader.
 
 **`kind: package`** (e.g., `dependencies/npm/react.md`):
 
@@ -263,7 +259,7 @@ summary: Spec for moving from session tokens to JWTs; addresses compliance flags
 source_path: sources/references/auth-migration.md   # ingest's copy destination: sources/references/<YYYY-MM>-<slug>.<ext>, always — no in-repo-doc exception
 source_type: spec                # spec | article | pr | ticket | transcript | example | doc | note
 source_date: 2026-04-01
-last_sync_commit:                # set only for in-repo docs (source_type: doc) — full SHA at last ingest, used by /graph-works:lint to detect changes
+last_sync_commit:                # set only for in-repo docs (source_type: doc) — full SHA at last ingest, used by /gw:lint to detect changes
 last_sync_at:                    # YYYY-MM-DD when sync state was recorded
 authors: [@psprowls]
 ingested: 2026-04-20
@@ -271,7 +267,7 @@ updated: 2026-04-20
 ---
 ```
 
-In-repo docs (an in-repo `.md` passed to `/graph-works:ingest` by repo-relative path) use `source_type: doc`, set `source_path` to the repo-relative path, and record `last_sync_commit` and `last_sync_at`. PDF/DOCX/etc. are deferred — only `.md` is supported today.
+In-repo docs (an in-repo `.md` passed to `/gw:ingest` by repo-relative path) use `source_type: doc`, set `source_path` to the repo-relative path, and record `last_sync_commit` and `last_sync_at`. Only `.md` is supported.
 
 ### Architecture pages (concept pages with `kind: architecture`)
 
@@ -425,17 +421,16 @@ Three categories use markdown tables in the body for structured rows. Header row
 
 ## Linking
 
-Use Obsidian wikilinks. Three forms:
+Use root-absolute markdown links — `okf_io.LinkGraph` parses `[text](/path.md)` and cannot see a `[[wikilink]]` at all:
 
 ```
-[[repositories/<repo>/packages/common-aws-node-ts.md]]                         # full path to entity page
-[[repositories/<repo>/packages/common-aws-node-ts.md|the AWS helpers package]] # custom display
-[[common-aws-node-ts]]                                                          # stem — resolves if unique
+[the AWS helpers package](/repositories/<repo>/packages/common-aws-node-ts.md)  # full path to entity page, custom display
+[common-aws-node-ts](/repositories/<repo>/packages/common-aws-node-ts.md)       # full path, display matches the stem
 ```
 
-For entity pages (packages, apps, etc.), prefer stem links when the name is unambiguous; use the full `repositories/<repo>/<kind-folder>/<name>.md` path only when disambiguation is needed. Use full paths for non-entity pages (concepts, sources, ADRs, etc.).
+Always use the full `/repositories/<repo>/<kind-folder>/<name>.md` path for entity pages — there is no stem-only resolution. Use full root-absolute paths for non-entity pages (concepts, sources, ADRs, etc.) too.
 
-Code references — when citing actual code — use a plain code reference (Obsidian won't wikilink them but it's searchable):
+Code references — when citing actual code — use a plain code reference (not a link):
 
 ```
 See `packages/common-aws-node-ts/src/handlers/baseApiHandler.ts:42`
@@ -443,9 +438,9 @@ See `packages/common-aws-node-ts/src/handlers/baseApiHandler.ts:42`
 
 ## Cross-reference rules
 
-- **Every package mentioned on an entity or concept page must be a wikilink** to `repositories/<repo>/packages/<name>.md`.
-- **Every ADR referenced in entity/concept pages must be a wikilink** to `adrs/<id>-<slug>`.
-- **Every claim on an entity page cites** either a source page (`[[sources/xxx]]`) or a code path (backticked, with file:line).
+- **Every package mentioned on an entity or concept page must be a link** to `/repositories/<repo>/packages/<name>.md`.
+- **Every ADR referenced in entity/concept pages must be a link** to `/adrs/<id>-<slug>.md`.
+- **Every claim on an entity page cites** either a source page (`[…](/sources/xxx.md)`) or a code path (backticked, with file:line).
 - **Contradictions get flagged inline** with a `> ⚠️ Contradiction:` callout naming the conflicting sources or code paths.
 - **Concept pages with `kind: architecture` link back to every entity and ADR they draw on.**
 

@@ -1,15 +1,15 @@
 # Ingest Workflow
 
-The detailed flow the LLM follows when the user runs `/graph-works:ingest <path>` or dispatches the `graph-works:ingestor` sub-agent.
+The detailed flow the LLM follows when the user runs `/gw:ingest <path>`.
 
-Sources in a graph-works bundle are one of the `source_kind` enum's seven values (`.gw/schema/Source.schema.json`): **spec**, **article**, **ticket**, **skill**, **doc**, **transcript**, **code-review**. The ingest flow is the same for all — only the summary's framing changes. (`skill` classifies but does not yet route to a guidance-page flow — see `work/epic-guidance-okf-port`.)
+Sources in a graph-works bundle are one of the `source_kind` enum's seven values (`.gw/schema/Source.schema.json`): **spec**, **article**, **ticket**, **skill**, **doc**, **transcript**, **code-review**. The ingest flow is the same for all — only the summary's framing changes. (`skill` classifies but has no guidance-page flow of its own; it ingests like any other source.)
 
 ## Source locations
 
 Sources are read from any filesystem path:
 
-- **Staged or ad hoc material** (clipped articles, specs, PRs, transcripts, or anything else you point `/graph-works:ingest` at) — `gw ingest --source <path>` reads the file directly, wherever it lives; file contents are never edited. A copy of the material lands at `<workspace>/okf/sources/references/<YYYY-MM>-<slug>.<ext>`; the original is never moved. There is no staging inbox.
-- **`<repo>/<...>.md`** (in-repo docs) — any `.md` that resolves under the repo but outside the bundle. Pass the repo-relative path straight to `/graph-works:ingest`. The summary records `source_path` as the reference copy's destination (same as any other source — no in-repo-doc exception) and classifies as `source_kind: doc`. The doc itself stays in the repo — the bundle does not duplicate it.
+- **Staged or ad hoc material** (clipped articles, specs, PRs, transcripts, or anything else you point `/gw:ingest` at) — `gw ingest --source <path>` reads the file directly, wherever it lives; file contents are never edited. A copy of the material lands at `<workspace>/okf/sources/references/<YYYY-MM>-<slug>.<ext>`; the original is never moved. There is no staging inbox.
+- **`<repo>/<...>.md`** (in-repo docs) — any `.md` that resolves under the repo but outside the bundle. Pass the repo-relative path straight to `/gw:ingest`. The summary records `source_path` as the reference copy's destination (same as any other source — no in-repo-doc exception) and classifies as `source_kind: doc`. The doc itself stays in the repo — the bundle does not duplicate it.
 
 ## Inputs
 
@@ -78,7 +78,7 @@ Path: `<workspace>/okf/sources/<YYYY-MM>-<slug>.md`. Required frontmatter per `.
 
 ### 5. Link the code entities (never edit entity pages)
 
-For each code entity (package, app, dependency) the source touches, add a root-absolute markdown link — `[<name>](/repositories/<repo>/<kind-folder>/<name>.md)` — under the source summary's `## Touches` section. Entity pages are scanner-owned — **do not edit them**. The scanner regenerates each entity's reciprocal reference from these forward-links on the next `/graph-works:scan`. Set the source page's `entity_uri:` frontmatter to the primary/canonical entity's URI from `entity_match.uri` in the brief (or `null` if none).
+For each code entity (package, app, dependency) the source touches, add a root-absolute markdown link — `[<name>](/repositories/<repo>/<kind-folder>/<name>.md)` — under the source summary's `## Touches` section. Entity pages are scanner-owned — **do not edit them**. The scanner regenerates each entity's reciprocal reference from these forward-links on the next `/gw:scan`. Set the source page's `entity_uri:` frontmatter to the primary/canonical entity's URI from `entity_match.uri` in the brief (or `null` if none).
 
 ### 6. Update / create explanation and reference pages
 
@@ -158,22 +158,16 @@ Summary the user sees in chat:
 - Attribute claims to speakers where possible.
 
 ### In-repo docs (source_kind: doc)
-- An in-repo `.md` passed by repo-relative path; the file lives in the repo. Not auto-surfaced — point `/graph-works:ingest` at it directly.
+- An in-repo `.md` passed by repo-relative path; the file lives in the repo. Not auto-surfaced — point `/gw:ingest` at it directly.
 - `source_path` is still the reference copy's destination, same as any other source — there is no in-repo-doc exception. The doc stays canonical — the summary doesn't duplicate it; it cross-references explanations, packages, ADRs, etc. inferred from the doc's content.
 - Often produces explanation pages (for high-level syntheses) or ADRs depending on the doc's content. Treat like a spec by default.
 
-## Future formats
+## Formats
 
-Today, in-repo doc ingest is limited to `.md` files passed by path. Other formats are deferred:
-
-- **`.pdf`** — needs a parser (or rely on the LLM's PDF Read support).
-- **`.docx` / `.odt`** — needs a parser.
-- **`.txt` / `.rst` / other markup** — supported via direct `/graph-works:ingest <path>`, not auto-surfaced.
-
-Manual ingest (passing the path to `/graph-works:ingest` directly) works today for any format `gw ingest` understands.
+In-repo doc ingest handles `.md` files passed by path. Passing a path to `/gw:ingest` directly works for any format `gw ingest` understands; `.txt`, `.rst` and other markup go through that route and are not auto-surfaced. `.pdf`, `.docx` and `.odt` need a parser and are not supported.
 
 ## After-ingest tips
 
 - **Big ingest?** Run `gw wiki lint` to check for new orphans or broken links.
-- **New ADR?** Run `/graph-works:lint` to check the ADR chain (supersedes / superseded_by).
+- **New ADR?** Run `/gw:lint` to check the ADR chain (supersedes / superseded_by).
 - **Graph check?** Run `gw wiki stats` to see if the new page is well-connected.

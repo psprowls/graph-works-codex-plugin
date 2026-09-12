@@ -1,10 +1,5 @@
 # graph-works 
 
-> **Substrate ownership.** This document describes behavior that the graph-works rebuild is
-> re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`epic-graph-works-core`](/work/_archive/epic-graph-works-core.md) and is re-authored there, not here.
-> Treat a disagreement between this page and that item as this page being stale.
-
 > **Maintained documentation for a source code repository — single package, monorepo, or hybrid.**
 > An adaptation of [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) targetting source code repositories.
 
@@ -27,8 +22,7 @@ READMEs go stale. Architecture diagrams drift. Comments rot. This skill turns an
 | Piece | What it does |
 |---|---|
 | **SKILL.md** | Master skill — architecture, workflows, page categories, iron rules |
-| **4 sub-agents** | `graph-works:scanner`, `graph-works:ingestor`, `graph-works:librarian`, `graph-works:linter` |
-| **13 slash commands** | `/graph-works:onboard`, `/graph-works:scan`, `/graph-works:ingest`, `/graph-works:query`, `/graph-works:lint`, `/graph-works:log`, `/graph-works:file`, `/graph-works:archive`, `/graph-works:regen-index`, `/graph-works:status`, `/graph-works:next`, `/graph-works:proposals`, `/graph-works:auto-drive` |
+| **13 entry-point skills** | `onboard`, `scan`, `ingest`, `query`, `lint`, `log`, `file`, `archive`, `regen-index`, `status`, `workflow`, `proposals`, `auto-drive` — invoked `/gw:<name>` in Claude Code, `$<name>` in Codex |
 | **Substrate operations** | Via `gw`: `bootstrap`, `scan`, `ingest`, `query`, `wiki lint` (+ code-drift) |
 | **12 reference docs** | Schema, page formats, 4 workflows (scan/ingest/query/lint), Obsidian setup, cross-tool setup, monorepo principles, lifecycle rules, sidecar schema |
 | **Wiki templates** | `CLAUDE.md`, `AGENTS.md`, `cursorrules`, `index.md`, `log.md`, plus entity templates (`entity-repository`, `entity-package`, `entity-app`, `entity-agent-plugin`, `entity-dependency`, `entity-test-suite`) and curated-page templates (`concept`, `concept-pattern`, `concept-architecture`, `source`, `adr`, `dependency`, `work`, `index`) |
@@ -37,7 +31,7 @@ READMEs go stale. Architecture diagrams drift. Comments rot. This skill turns an
 
 ```bash
 # 1. Locate or create the workspace, then configure it (in Claude Code)
-> /graph-works:onboard
+> /gw:onboard
 
 # 2. Open the workspace in Obsidian (sidebar will show okf/ and its pages).
 open -a Obsidian ~/my-repo/.works
@@ -45,16 +39,16 @@ open -a Obsidian ~/my-repo/.works
 # 3. Scan the repo — renders one page per admitted entity (package, app, dependency, …)
 cd ~/my-repo
 # in Claude Code:
-> /graph-works:scan
+> /gw:scan
 
 # 4. Ingest a source (article, spec, PR summary) from anywhere on disk
-> /graph-works:ingest ~/Downloads/auth-migration.md
+> /gw:ingest ~/Downloads/auth-migration.md
 
 # 5. Ask questions
-> /graph-works:query "which packages depend on common-context-node-ts?"
+> /gw:query "which packages depend on common-context-node-ts?"
 
 # 6. Health check (mechanical + semantic + code drift)
-> /graph-works:lint
+> /gw:lint
 ```
 
 ## Page categories
@@ -77,7 +71,7 @@ Only the schema loader file changes per tool. The scripts run identically everyw
 | Claude Code | `<workspace>/CLAUDE.md` |
 | Codex CLI (OpenAI) | `<workspace>/AGENTS.md` |
 | Cursor (modern) | `<workspace>/AGENTS.md` |
-| Cursor (legacy) | `<workspace>/.cursorrules` |
+| Cursor (`.cursorrules`) | `<workspace>/.cursorrules` |
 | Antigravity (Google) | `<workspace>/AGENTS.md` |
 | OpenCode / Pi | `<workspace>/AGENTS.md` |
 | Gemini CLI | `<workspace>/AGENTS.md` |
@@ -115,7 +109,7 @@ Only the schema loader file changes per tool. The scripts run identically everyw
     └── AGENTS.md                # same content for Codex/Cursor/Antigravity/OpenCode
 ```
 
-**Iron rule:** the code is the source of truth. Ingested material is never edited — the ingest flow (either `gw ingest`'s `--backend bedrock`/`vercel` pipeline, or the `claude_code`-mode ingestor sub-agent per `/graph-works:ingest`) copies it into `<workspace>/okf/sources/references/`, leaving the original untouched; all curated writes go under `<workspace>/okf/`. Work items live at `<workspace>/okf/work/` and are referenced from other pages via wikilinks (e.g. `[[../work/release-healthkit/children/epic-reliability/children/bug-flaky-healthkit-tests]]`).
+**Iron rule:** the code is the source of truth. Ingested material is never edited — the ingest flow (either `gw ingest`'s `--backend bedrock`/`vercel` pipeline, or the `claude_code`-mode `ingest` skill per `/gw:ingest`) copies it into `<workspace>/okf/sources/references/`, leaving the original untouched; all curated writes go under `<workspace>/okf/`. Work items live at `<workspace>/okf/work/` and are referenced from other pages via root-absolute markdown links (e.g. `[bug-flaky-healthkit-tests](/work/release-healthkit/children/epic-reliability/children/bug-flaky-healthkit-tests.md)`).
 
 ## Four operations
 
