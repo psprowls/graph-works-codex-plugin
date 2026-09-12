@@ -1,10 +1,5 @@
 # Cross-Tool Setup
 
-> **Substrate ownership.** This document describes behavior that the graph-works rebuild is
-> re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`feature-epic-feature-workspace-manifest-layout-resolution`](/work/_archive/epic-graph-works-core/children/_archive/feature-epic-feature-workspace-manifest-layout-resolution.md) and is re-authored there, not here.
-> Treat a disagreement between this page and that item as this page being stale.
-
 The graph-works plugin is tool-agnostic. The **scripts** are pure Python stdlib and run anywhere. Only the **schema loader file** (the file the tool reads to understand conventions) differs per tool.
 
 ## How different CLIs discover wiki-level instructions
@@ -14,7 +9,7 @@ The graph-works plugin is tool-agnostic. The **scripts** are pure Python stdlib 
 | Claude Code | `<workspace>/CLAUDE.md` | Loaded automatically when CC starts in the wiki dir |
 | Codex CLI (OpenAI) | `<workspace>/AGENTS.md` | Loaded at session start |
 | Cursor (new) | `<workspace>/AGENTS.md` | Modern Cursor reads `AGENTS.md` |
-| Cursor (legacy) | `<workspace>/.cursorrules` | Older Cursor versions |
+| Cursor (`.cursorrules`) | `<workspace>/.cursorrules` | Cursor versions that read `.cursorrules` |
 | Google Antigravity | `<workspace>/AGENTS.md` | Standard `AGENTS.md` convention |
 | OpenCode / Pi | `<workspace>/AGENTS.md` | Same convention |
 | Gemini CLI | `<workspace>/AGENTS.md` | Same convention |
@@ -51,12 +46,12 @@ ln -sf CLAUDE.md .cursorrules
 ### Claude Code
 
 ```bash
-cd <repo>             # /graph-works:onboard resolves the workspace via gw
+cd <repo>             # /gw:onboard resolves the workspace via gw
 claude
-> /graph-works:onboard            # if the workspace isn't initialized
-> /graph-works:scan          # detect packages
-> /graph-works:ingest ~/Downloads/auth-migration.md
-> /graph-works:query "which packages depend on common-context-node-ts?"
+> /gw:onboard            # if the workspace isn't initialized
+> /gw:scan          # detect packages
+> /gw:ingest ~/Downloads/auth-migration.md
+> /gw:query "which packages depend on common-context-node-ts?"
 ```
 
 ### Codex CLI

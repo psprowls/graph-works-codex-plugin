@@ -1,6 +1,6 @@
 ---
 name: finishing-relay
-description: Use when the finish stage of a work item is dispatched under auto-drive with mode relay — sends one orca orchestration ask carrying the merge/PR/hold/discard decision instead of finishing-a-development-branch's interactive menu, executes the chosen outcome, and settles the item. Dispatched by the graph-works:workflow skill when the `Auto-drive context:` line appears in this session's own dispatch prompt; never invoked directly by a human.
+description: Use when the finish stage of a work item is dispatched under auto-drive with mode relay — sends one orca orchestration ask carrying the merge/PR/hold/discard decision instead of finishing-a-development-branch's interactive menu, executes the chosen outcome, and settles the item. Dispatched by the gw:workflow skill when the `Auto-drive context:` line appears in this session's own dispatch prompt; never invoked directly by a human.
 ---
 
 # Finishing a Development Branch — Relay Mode
@@ -19,7 +19,7 @@ choice → Settle the item and report.
 merge/PR/hold/discard decision for `<work-path>`."
 
 **Detection is the caller's job, not this skill's.** This skill is
-dispatched only when the `graph-works:workflow` skill (or `/graph-works:next`)
+dispatched only when the `gw:workflow` skill (or `/gw:workflow`)
 already found the `Auto-drive context:` line in this session's own dispatch
 prompt and routed here instead of `finishing-a-development-branch`. Nothing
 in this skill re-checks that condition.
@@ -72,15 +72,10 @@ git worktree list --porcelain
   line reads `refs/heads/<merge target>`. The R4 merge executes there, not
   in this worker's own worktree.
 
-**Known gap:** the design spec names "dirty state" (uncommitted changes) as
-an Escalation-path trigger alongside failing tests and merge conflicts, but
-does not specify a detection procedure, and this plan didn't operationalize
-one — R2 does not check `git status` for uncommitted changes. In practice
-every task in this plan's own workflow ends with a commit, so a dirty
-worktree at finish-stage would itself be anomalous; if it's observed, treat
-it as a reason to escalate manually rather than proceeding, but there's no
-automated check for it here. **Live-validation item:** decide whether to add
-one before this skill's first real relay run.
+**Dirty state has no automated check.** R2 does not run `git status`. Every
+stage ends with a commit, so uncommitted changes at finish-stage are
+anomalous — if you notice them, enter the **Escalation path** rather than
+proceeding.
 
 Carry forward into R3: the merge target, the classified case, the target
 worktree path (forked-child case only), the current HEAD SHA (`git rev-parse
@@ -104,10 +99,9 @@ orca orchestration ask --from <this session's --from> \
 ```
 
 `ask` blocks until the coordinator replies and prints the reply body — there
-is no separate poll/fetch step. **Live-validation item:** if the call times
-out or disconnects, the resume mechanism is not a documented flag in this
-session's own preamble; check `orca orchestration ask --help` for the real
-resume syntax before sending a second, duplicate question.
+is no separate poll/fetch step. If the call times out or disconnects, check
+`orca orchestration ask --help` for the resume syntax before sending a
+second, duplicate question — never re-send blind.
 
 The reply body is one of the option labels (`merge`, `pr`, `hold`,
 `discard`). Any other reply text: treat it as `hold` and note the verbatim
@@ -148,9 +142,8 @@ EOF
 )"
 ```
 
-`<path title>` is the work item's frontmatter `title:` field. Reuses
-`finishing-a-development-branch`'s Option 2 body template verbatim. Continue
-to R5 with the PR URL.
+`<path title>` is the work item's frontmatter `title:` field. Continue to R5
+with the PR URL.
 
 ### `hold`
 
@@ -217,10 +210,9 @@ failure):
    own command shape) roughly every 5 minutes while polling — this
    session's own dispatch rules require a heartbeat on this cadence
    whenever it's active and waiting, regardless of whether this particular
-   coordinator wait path consumes it.
-   **Live-validation item:** confirm on the first real run which field of
-   the `check` output carries the reply body for an escalation reply — not
-   documented in `--help` output for this address form.
+   coordinator wait path consumes it. Which field of the `check` output
+   carries an escalation reply's body is not documented for this address
+   form — read it off the first real reply rather than assuming a key.
 3. A reply with instructions (e.g. "fix the tests", "merge anyway") →
    follow it, then re-enter the flow at R1 so the checks re-run against the
    new state.
@@ -236,19 +228,15 @@ Relay mode never removes worktrees and never deletes branches — not for
 coordinator releases this session's terminal on `worker_done`, and any
 child-worktree removal after merge-back is the coordinator's or the human's
 concern, not this skill's. `finishing-a-development-branch`'s Step 6
-cleanup logic is intentionally absent here — every auto-drive worktree is
+cleanup logic does not apply here — every auto-drive worktree is
 host-managed by definition.
 
 ## Out of scope
 
-- Coordinator-side changes — `auto-drive` SKILL.md §4.3 (question
-  mirroring) and §4.4 (escalation) already handle both message types this
-  skill sends; nothing here needs a coordinator change.
-- `gw work orchestrate` changes — the `Auto-drive context:` prompt line and
-  the `merge_target` field it carries already ship
-  (`packages/work-io/src/work_io/orchestrate.py:313-329`).
-- Changes to `finishing-a-development-branch`'s own behavior — this skill
-  is fully self-contained; the stock skill is untouched.
+- Coordinator-side handling — `auto-drive` SKILL.md §4.3 (question
+  mirroring) and §4.4 (escalation) own both message types this skill sends.
+- `finishing-a-development-branch`'s own behavior — this skill is fully
+  self-contained and never modifies the stock skill.
 - Automatic `wontfix` on discard, auto-retry, and automatic merge-conflict
   resolution — all explicit policy (Escalation path, `discard`
   recorded-not-executed), not gaps.

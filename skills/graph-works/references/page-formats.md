@@ -1,12 +1,8 @@
 # Page Formats
 
-> **Substrate ownership.** `epic-wiki-io-format-layer` (the item this disclaimer used to
-> point at) is `resolved`/`phase: done` — pointing readers there now sends them to closed
-> history, not live truth. If this page and the shipped workspace tree
-> (`<repo>/.works/okf/...`) disagree, treat this page as stale and file (or find) the
-> TechDebt item that tracks the drift; see
-> [[../../../../work/tech-debt-plugin-docs-layout-claims]] for the layout-claim sweep that
-> last corrected this page.
+> **The shipped workspace tree wins.** If this page and the tree `gw bootstrap`
+> actually builds (`<repo>/.works/okf/...`) disagree, this page is wrong: trust the
+> tree, and file a TechDebt item for the drift.
 
 Every wiki page has the same skeleton: YAML frontmatter + a section structure that matches its category. Below are the canonical formats. Templates live in `assets/page-templates/`. The full enum and per-category frontmatter spec lives in `wiki-schema.md`.
 
@@ -28,9 +24,9 @@ containing a markdown table. Rules:
 - Under each H3: a one-sentence paragraph describing the directory, then a markdown table with columns `Path | Kind | Description`. `Path` is relative to that section's root (e.g. `middleware/auth.ts` inside `### <name>/src/`). `Kind` is `file` or `dir`. `Description` starts as `— TODO` and is filled in by the agent later.
 - Nested files (depth ≥ 2) flatten into rows inside their depth-1 parent's table. Directories deeper than the cutoff (default `max_depth=4`) are listed as `dir` rows in their depth-1 parent's table instead of getting their own section.
 - The scanner pre-populates the tables via `git ls-files` (so `.gitignore` is respected) with `— TODO` Description placeholders. Per-row descriptions are filled in by the agent on a later pass.
-- `/graph-works:lint`'s file-map drift check flags rows whose Path is no longer on disk; new files showing up on disk do not fail lint, since `dir`-row summarization is allowed.
-- **Legacy heading+bullet pages on disk** (pre-2026-05) are parsed gracefully: directory entries from H3 headers are still extracted, but file-row entries are dropped. The next scan re-emits the block in the new table format when the page still shows the unfilled-template signature.
-- **Prod vs testing split:** a package/app entity page's File map shows only **prod source + prod config**. Test files (any component named `tests/`, `__tests__/`, `test/`, or `spec/`), test config (`pytest.ini`, `tox.ini`, `conftest.py`, `jest.config.*`, `vitest.config.*`, `playwright.config.*`, `cypress.config.*`, `mocha.config.*`/`.mocharc.*`, `karma.conf.*`, `ava.config.*`), and test fixtures (typically under `tests/fixtures/`) do not appear here — they belong to that package's own `test_suite` entity page (see below). The prod/test split is implemented by `_is_test_path()` in `packages/wiki-io/src/wiki_io/scan_monorepo.py` — that helper is the single source of truth.
+- `/gw:lint`'s file-map drift check flags rows whose Path is no longer on disk; new files showing up on disk do not fail lint, since `dir`-row summarization is allowed.
+- **Heading+bullet File map blocks** are parsed gracefully: directory entries from H3 headers are still extracted, but file-row entries are dropped. The next scan re-emits the block in table format when the page still shows the unfilled-template signature.
+- **Prod vs testing split:** a package/app entity page's File map shows only **prod source + prod config**. Test files (any component named `tests/`, `__tests__/`, `test/`, or `spec/`), test config (`pytest.ini`, `tox.ini`, `conftest.py`, `jest.config.*`, `vitest.config.*`, `playwright.config.*`, `cypress.config.*`, `mocha.config.*`/`.mocharc.*`, `karma.conf.*`, `ava.config.*`), and test fixtures (typically under `tests/fixtures/`) do not appear here — they belong to that package's own `test_suite` entity page (see below). The prod/test split is implemented by `_is_test_path()` in `packages/code-graph-io/src/code_graph_io/structural_nodes.py` — that helper is the single source of truth.
 - **Fixtures at non-test paths:** workspaces that put fixtures outside a `tests/`-prefixed path (e.g. a root-level `fixtures/` directory used at runtime too) are classified as prod by the scanner. Document them by hand in the `test_suite` entity page's `## Fixtures` section if they are test-only.
 
 ## Test-suite entity pages
@@ -198,25 +194,25 @@ interface IGlobalContext {
 From `packages/common-context-node-ts/src/globalContext.ts`.
 
 ## Used in
-- [[repositories/<repo>/packages/common-aws-node-ts.md]] — injects via middleware
-- [[repositories/<repo>/packages/common-context-node-ts.md]] — defines the interface
+- [common-aws-node-ts](/repositories/<repo>/packages/common-aws-node-ts.md) — injects via middleware
+- [common-context-node-ts](/repositories/<repo>/packages/common-context-node-ts.md) — defines the interface
 - All `*-data-node-ts` packages — scope queries by `session.user_id`
 
 ## Related patterns
-- [[concepts/middleware-pipeline]]
-- [[concepts/repository-pattern]]
+- [middleware-pipeline](/concepts/middleware-pipeline.md)
+- [repository-pattern](/concepts/repository-pattern.md)
 
 ## Sources
-- [[sources/2025-12-context-refactor-spec]]
+- [2025-12-context-refactor-spec](/sources/2025-12-context-refactor-spec.md)
 
 ## Open questions / gotchas
 - Default `session.user_id` is `ObjectId(0)` — tests must call `updateSession()` before DB operations.
-- ⚠️ Contradiction: `[[repositories/<repo>/packages/shared-aws-node-ts.md]]` assumes `session.session_id` always populated, but `[[sources/auth-migration-spec]]` says pre-login requests have null.
+- ⚠️ Contradiction: `[shared-aws-node-ts](/repositories/<repo>/packages/shared-aws-node-ts.md)` assumes `session.session_id` always populated, but `[auth-migration-spec](/sources/auth-migration-spec.md)` says pre-login requests have null.
 ```
 
 ## 3a. Concept page — pattern variant
 
-A pattern is a prescriptive concept ("when to apply this, what to watch out for") rather than a descriptive one ("what this is in our codebase"). Naming convention only — no new `category` and no new `kind:` discriminator on concepts. Mirrors how comparison pages work today (`<a>-vs-<b>.md`).
+A pattern is a prescriptive concept ("when to apply this, what to watch out for") rather than a descriptive one ("what this is in our codebase"). Naming convention only — no new `category` and no new `kind:` discriminator on concepts, the same way comparison pages work (`<a>-vs-<b>.md`).
 
 Filename: `concepts/<topic>-pattern.md`. The `-pattern` suffix is the discriminator.
 
@@ -247,16 +243,16 @@ The shape of the pattern. Code sketch is fine; keep it minimal and language-agno
 **Negative:** …
 
 ## Example sources
-- [[sources/2026-05-tanstack-suspense-example]] — minimal Expo demo.
-- [[sources/2026-04-react-19-suspense-blog]] — conceptual write-up.
+- [2026-05-tanstack-suspense-example](/sources/2026-05-tanstack-suspense-example.md) — minimal Expo demo.
+- [2026-04-react-19-suspense-blog](/sources/2026-04-react-19-suspense-blog.md) — conceptual write-up.
 
 ## Where this could apply in the codebase
-- [[repositories/<repo>/packages/web-next-ts.md]] — current isLoading-flag pattern in dashboard queries.
-- [[repositories/<repo>/packages/app-expo-ts.md]] — same.
+- [web-next-ts](/repositories/<repo>/packages/web-next-ts.md) — current isLoading-flag pattern in dashboard queries.
+- [app-expo-ts](/repositories/<repo>/packages/app-expo-ts.md) — same.
 
 ## Related patterns
-- [[concepts/error-boundary-pattern]]
-- [[concepts/global-context]]
+- [error-boundary-pattern](/concepts/error-boundary-pattern.md)
+- [global-context](/concepts/global-context.md)
 
 ## Open questions
 - …
@@ -278,7 +274,7 @@ summary: Move from opaque session tokens to JWTs; driven by compliance, affects 
 source_path: sources/references/auth-migration.md
 source_type: spec                # spec | article | pr | ticket | transcript | example | doc | note
 source_date: 2026-04-01
-last_sync_commit:                # set only for in-repo docs (source_type: doc) — full SHA at last ingest, used by /graph-works:lint to detect changes
+last_sync_commit:                # set only for in-repo docs (source_type: doc) — full SHA at last ingest, used by /gw:lint to detect changes
 last_sync_at:                    # YYYY-MM-DD when sync state was recorded
 authors: [@psprowls]
 ingested: 2026-04-20
@@ -305,23 +301,23 @@ Two sentences max. What the source proposes / argues / reports.
 - Prototype in `packages/shared-aws-node-ts/src/auth/__prototype__.ts`
 
 ## Surprises / contradictions
-- Spec claims `session.session_id` unchanged, but see `[[concepts/global-context]]` — field shape differs.
+- Spec claims `session.session_id` unchanged, but see `[global-context](/concepts/global-context.md)` — field shape differs.
 
 ## Touches
-- [[repositories/<repo>/packages/shared-aws-node-ts.md]]
-- [[repositories/<repo>/packages/shared-native-ts.md]]
-- [[repositories/<repo>/packages/shared-domain-ts.md]]
-- [[concepts/global-context]]
+- [shared-aws-node-ts](/repositories/<repo>/packages/shared-aws-node-ts.md)
+- [shared-native-ts](/repositories/<repo>/packages/shared-native-ts.md)
+- [shared-domain-ts](/repositories/<repo>/packages/shared-domain-ts.md)
+- [global-context](/concepts/global-context.md)
 
 ## Decisions triggered
-- [[adrs/0014-jwt-sessions]] — accepted
+- [0014-jwt-sessions](/adrs/0014-jwt-sessions.md) — accepted
 
 ## Where it's cited in this wiki
-- [[concepts/global-context]]
-- [[adrs/0014-jwt-sessions]]
+- [global-context](/concepts/global-context.md)
+- [0014-jwt-sessions](/adrs/0014-jwt-sessions.md)
 ```
 
-`last_sync_commit` (40-char SHA) and `last_sync_at` (YYYY-MM-DD) record the repo commit this page was last verified against. `/graph-works:ingest` writes both when re-ingesting an in-repo doc (`source_type: doc`) with a clean working tree on `main`. `/graph-works:lint` compares HEAD against `last_sync_commit` to flag source files that have changed since the last ingest.
+`last_sync_commit` (40-char SHA) and `last_sync_at` (YYYY-MM-DD) record the repo commit this page was last verified against. `/gw:ingest` writes both when re-ingesting an in-repo doc (`source_type: doc`) with a clean working tree on `main`. `/gw:lint` compares HEAD against `last_sync_commit` to flag source files that have changed since the last ingest.
 
 ## 5. Architecture concept page (`kind: architecture`)
 
@@ -346,33 +342,33 @@ Two-three sentences capturing the current understanding of how requests flow thr
 
 ## Layers
 
-1. **Client** — React Native (`[[repositories/<repo>/packages/app-expo-ts.md]]`) or Next.js (`[[repositories/<repo>/packages/web-next-ts.md]]`) uses `[[repositories/<repo>/packages/shared-domain-ts.md]]` client
-2. **API Gateway / Lambda** — routes to `*-aws-node-ts` handlers; middleware pipeline establishes `[[concepts/global-context]]`
+1. **Client** — React Native (`[app-expo-ts](/repositories/<repo>/packages/app-expo-ts.md)`) or Next.js (`[web-next-ts](/repositories/<repo>/packages/web-next-ts.md)`) uses `[shared-domain-ts](/repositories/<repo>/packages/shared-domain-ts.md)` client
+2. **API Gateway / Lambda** — routes to `*-aws-node-ts` handlers; middleware pipeline establishes `[global-context](/concepts/global-context.md)`
 3. **Data layer** — handlers delegate to `*-data-node-ts` repositories scoped by `session.user_id`
 4. **MongoDB** — per-domain database via `IDatabaseManager.getDatabase(name)`
 
 ## Diagrams
-- See the diagram attached to `[[sources/2025-12-architecture-overview]]` (the ingest flow copies attached material to `sources/references/`)
+- See the diagram attached to `[2025-12-architecture-overview](/sources/2025-12-architecture-overview.md)` (the ingest flow copies attached material to `sources/references/`)
 
 ## Key packages
-- [[repositories/<repo>/packages/shared-domain-ts.md]] — client
-- [[repositories/<repo>/packages/shared-aws-node-ts.md]] — auth
-- [[repositories/<repo>/packages/common-aws-node-ts.md]] — middleware base
-- [[repositories/<repo>/packages/common-context-node-ts.md]] — context
-- [[repositories/<repo>/packages/activities-data-node-ts.md]] — repo base classes
+- [shared-domain-ts](/repositories/<repo>/packages/shared-domain-ts.md) — client
+- [shared-aws-node-ts](/repositories/<repo>/packages/shared-aws-node-ts.md) — auth
+- [common-aws-node-ts](/repositories/<repo>/packages/common-aws-node-ts.md) — middleware base
+- [common-context-node-ts](/repositories/<repo>/packages/common-context-node-ts.md) — context
+- [activities-data-node-ts](/repositories/<repo>/packages/activities-data-node-ts.md) — repo base classes
 
 ## Key concepts
-- [[concepts/global-context]]
-- [[concepts/middleware-pipeline]]
-- [[concepts/repository-pattern]]
+- [global-context](/concepts/global-context.md)
+- [middleware-pipeline](/concepts/middleware-pipeline.md)
+- [repository-pattern](/concepts/repository-pattern.md)
 
 ## Decisions shaping this
-- [[adrs/0005-lambda-per-endpoint]]
-- [[adrs/0008-middleware-pipeline]]
-- [[adrs/0014-jwt-sessions]]
+- [0005-lambda-per-endpoint](/adrs/0005-lambda-per-endpoint.md)
+- [0008-middleware-pipeline](/adrs/0008-middleware-pipeline.md)
+- [0014-jwt-sessions](/adrs/0014-jwt-sessions.md)
 
 ## How this synthesis has changed
-- **2026-04-20** — added JWT flow from `[[sources/2026-04-auth-migration-spec]]`
+- **2026-04-20** — added JWT flow from `[2026-04-auth-migration-spec](/sources/2026-04-auth-migration-spec.md)`
 - **2025-12-15** — initial write-up
 ```
 
@@ -397,10 +393,10 @@ updated: 2026-04-20
 # ADR-0014: JWT Sessions
 
 **Status:** accepted (2026-04-18)
-**Supersedes:** [[adrs/0007-opaque-session-tokens]]
+**Supersedes:** [0007-opaque-session-tokens](/adrs/0007-opaque-session-tokens.md)
 
 ## Context
-Compliance flagged the current session-token storage pattern. See [[sources/2026-04-auth-migration-spec]] for full context.
+Compliance flagged the current session-token storage pattern. See [2026-04-auth-migration-spec](/sources/2026-04-auth-migration-spec.md) for full context.
 
 ## Decision
 Adopt short-lived JWTs signed by Cognito. Validation in middleware; refresh on the client.
@@ -417,12 +413,12 @@ Adopt short-lived JWTs signed by Cognito. Validation in middleware; refresh on t
 
 ## Alternatives considered
 - Rotate opaque tokens with short TTL (rejected: still server-side)
-- Auth0 (rejected: see [[concepts/cognito-vs-auth0]])
+- Auth0 (rejected: see [cognito-vs-auth0](/concepts/cognito-vs-auth0.md))
 
 ## Impact
-- [[repositories/<repo>/packages/shared-aws-node-ts.md]] — middleware change
-- [[repositories/<repo>/packages/shared-native-ts.md]] — refresh logic
-- [[repositories/<repo>/packages/shared-domain-ts.md]] — header injection
+- [shared-aws-node-ts](/repositories/<repo>/packages/shared-aws-node-ts.md) — middleware change
+- [shared-native-ts](/repositories/<repo>/packages/shared-native-ts.md) — refresh logic
+- [shared-domain-ts](/repositories/<repo>/packages/shared-domain-ts.md) — header injection
 
 ## Follow-ups
 - Roll out to staging 2026-05
@@ -431,7 +427,7 @@ Adopt short-lived JWTs signed by Cognito. Validation in middleware; refresh on t
 
 ## 7. Dependency page
 
-`/graph-works:scan` writes one graph-derived dependency page per dep the monorepo touches into `dependencies/<ecosystem>/<name>.md`, using the scanner-owned `entity-dependency.md` template shape (`uri`, `kind: dependency`, `graph_name`, `last_scan_at`, `ecosystem`, `used_by`, `versions_in_use`). The `kind: package | service` example below is a **legacy curated-page shape** that no lint group checks — the `dependency_layer` group it was gated behind does not exist in graph-works-core. It is not what the scanner writes, and its fate is open in `2026-08-20-tech-debt-revisit-dependency-layer-lint`. See `wiki-schema.md` for the `kind: service` variant.
+`/gw:scan` writes one graph-derived dependency page per dep the monorepo touches into `dependencies/<ecosystem>/<name>.md`, using the scanner-owned `entity-dependency.md` template shape (`uri`, `kind: dependency`, `graph_name`, `last_scan_at`, `ecosystem`, `used_by`, `versions_in_use`). The `kind: package | service` example below is a **hand-authored curated-page shape** that no lint check reads. It is not what the scanner writes. See `wiki-schema.md` for the `kind: service` variant.
 
 ```markdown
 ---
@@ -457,35 +453,35 @@ One paragraph: what this library does, why we use it, which surfaces.
 ## Versions in use
 | Version | Used in | Notes |
 |---|---|---|
-| 19.0.0 | [[repositories/<repo>/packages/web-next-ts.md]], [[repositories/<repo>/packages/shared-ui-react-ts.md]] | Migrated 2026-Q1 |
-| 18.3.1 | [[repositories/<repo>/packages/app-expo-ts.md]], [[repositories/<repo>/packages/shared-ui-native-ts.md]] | Pinned by RN 0.76 |
+| 19.0.0 | [web-next-ts](/repositories/<repo>/packages/web-next-ts.md), [shared-ui-react-ts](/repositories/<repo>/packages/shared-ui-react-ts.md) | Migrated 2026-Q1 |
+| 18.3.1 | [app-expo-ts](/repositories/<repo>/packages/app-expo-ts.md), [shared-ui-native-ts](/repositories/<repo>/packages/shared-ui-native-ts.md) | Pinned by RN 0.76 |
 
 ## Used by
-- [[repositories/<repo>/packages/web-next-ts.md]]
-- [[repositories/<repo>/packages/app-expo-ts.md]]
-- [[repositories/<repo>/packages/shared-ui-react-ts.md]]
-- [[repositories/<repo>/packages/shared-ui-native-ts.md]]
+- [web-next-ts](/repositories/<repo>/packages/web-next-ts.md)
+- [app-expo-ts](/repositories/<repo>/packages/app-expo-ts.md)
+- [shared-ui-react-ts](/repositories/<repo>/packages/shared-ui-react-ts.md)
+- [shared-ui-native-ts](/repositories/<repo>/packages/shared-ui-native-ts.md)
 
 ## Key patterns in this repo
 - Functional components only; no class components.
-- Suspense + Server Components in `[[repositories/<repo>/packages/web-next-ts.md]]` (Next 15 App Router).
-- `use client` directive boundaries — see [[concepts/nextjs-client-boundary]].
+- Suspense + Server Components in `[web-next-ts](/repositories/<repo>/packages/web-next-ts.md)` (Next 15 App Router).
+- `use client` directive boundaries — see [nextjs-client-boundary](/concepts/nextjs-client-boundary.md).
 
 ## Gotchas / workarounds
-- ⚠️ React 19 `useEffect` runs twice in dev (Strict Mode) — see [[work/release-web-platform/children/epic-react-19/children/bug-double-mount-in-dev]].
+- ⚠️ React 19 `useEffect` runs twice in dev (Strict Mode) — see [bug-double-mount-in-dev](/work/release-web-platform/children/epic-react-19/children/bug-double-mount-in-dev.md).
 - Expo pins React 18; can't bump until RN catches up.
 
 ## Upgrade history
-- **2026-02** — bumped web surfaces to 19.0. See [[sources/2026-02-react-19-migration-pr]].
+- **2026-02** — bumped web surfaces to 19.0. See [2026-02-react-19-migration-pr](/sources/2026-02-react-19-migration-pr.md).
 - **2025-09** — initial adoption of concurrent features.
 
 ## Decisions
-- [[adrs/0011-react-19-on-web-only]]
+- [0011-react-19-on-web-only](/adrs/0011-react-19-on-web-only.md)
 
 ## Related
-- [[dependencies/npm/react-native.md]]
-- [[concepts/server-state-vs-client-state]]
-- [[work/rn-0-77-upgrade]]
+- [react-native](/dependencies/npm/react-native.md)
+- [server-state-vs-client-state](/concepts/server-state-vs-client-state.md)
+- [rn-0-77-upgrade](/work/rn-0-77-upgrade.md)
 ```
 
 ## 8. Work page

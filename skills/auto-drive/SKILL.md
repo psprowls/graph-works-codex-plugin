@@ -1,6 +1,6 @@
 ---
 name: auto-drive
-description: Use when driving a work item's full pipeline unattended via Orca-supervised workers — an epic's entire dependency graph or a lone item's phase sequence — instead of walking one /graph-works:next stage at a time by hand. Runs a stateless plan/act/wait coordinator loop over `gw work orchestrate` and the Orca orchestration CLI — binds a Run, dispatches ready stages as supervised workers, handles the design (attend) and finish (relay) human gates, processes worker_done/question/escalation, and resumes cleanly after a crash or restart by re-deriving everything from Orca + the vault.
+description: Use when driving a work item's full pipeline unattended via Orca-supervised workers — an epic's entire dependency graph or a lone item's phase sequence — instead of walking one /gw:workflow stage at a time by hand. Runs a stateless plan/act/wait coordinator loop over `gw work orchestrate` and the Orca orchestration CLI — binds a Run, dispatches ready stages as supervised workers, handles the design (attend) and finish (relay) human gates, processes worker_done/question/escalation, and resumes cleanly after a crash or restart by re-deriving everything from Orca + the vault.
 ---
 
 # Auto-Drive Coordinator
@@ -61,7 +61,7 @@ that rule is about *Run/task* state, not static repo identity.
 
 The Run's objective string is the stable join key for this path:
 `auto-drive:<work-path>`. Nothing else maps path → Run — this lookup **is** the
-entire resume mechanism. Re-running `/graph-works:auto-drive <work-path>` always
+entire resume mechanism. Re-running `/gw:auto-drive <work-path>` always
 re-derives the Run this way; there is no separate `--resume` flag.
 
 1. `orca orchestration run-list --json` and scan for an entry whose
@@ -108,7 +108,7 @@ crash/compaction resume the same code path as a normal cycle.
 4. Build the `--live` key list for §2.2 from every task classified live.
    `worker-show --dispatch <dispatch_id> --json` is now a targeted
    follow-up for one dispatch's `result.dispatch.last_heartbeat_at` (used by
-   §3 step 3's probe), not an N-call sweep over every task.
+   §3 step 4's probe), not an N-call sweep over every task.
 
 ### 2.2 Plan
 
@@ -121,14 +121,19 @@ Run — there's nothing live yet). The result:
 - `dispatches[]` — each entry: `key` (`<work-path>#<phase>`), `path`, `phase`,
   `kind`, `effort`, `skill`, `mode` (`autonomous` | `attend` | `relay`),
   `model` (`null` = inherit, omit `--model`), `reasoning_effort`,
-  `worktree` (`action`: `reuse` | `fork-child` | `create-top-level`, `path`,
-  `branch`, `base_branch`, `exists`), `merge_target`, `prompt`.
+  `worktree` (`action`: `reuse` | `fork-child` | `create-top-level` | `main`,
+  `path`, `branch`, `base_branch`, `exists`), `merge_target`, `prompt`.
 - `advances[]` — each: `path`, `reason`, `worktree`/`branch` (the epic's
   already-known worktree, when one exists — `null` otherwise, e.g. before any
   worker has ever been dispatched for this epic).
 - `blocked[]` — each: `path`, `kind` (one of exactly `deps`, `capacity`,
   `affects-overlap`, `effort-required`, `decisions`, `human`,
-  `worktree-pending`, `invalid`), `reason`.
+  `relay-untailed`, `worktree-pending`, `worktree-unsupported`,
+  `worktree-unprovable`, `worktree-ambiguous`, `invalid`),
+  `reason`. The closed vocabulary is `BLOCKED_KINDS` in
+  `graph_works_core.orchestrate.commands` — if a `kind` arrives that isn't in
+  this list, treat it as this skill being out of date, print it, and act on
+  nothing.
 - `warnings[]` — plain strings (e.g. a stale `--live` key matching nothing, or
   a malformed decisions-ledger entry). Print these as notes; they are not
   blockers.
@@ -171,14 +176,26 @@ you know is out of date).
   (xtra-small / small / medium / large / xtra-large). Run
   `gw work advance <work-path> --effort <value>`, then restart the cycle at §2.1.
 - **Every other kind** (`deps`, `capacity`, `affects-overlap`, `decisions`,
-  `human`, `worktree-pending`, `invalid`): print one line each
+  `human`, `relay-untailed`, `worktree-pending`, `worktree-unsupported`,
+  `worktree-unprovable`, `worktree-ambiguous`, `invalid`): print one line each
   (`blocked <work-path> (<kind>): <reason>`) and take no action. `capacity` and
   `worktree-pending` resolve themselves next cycle as slots/worktrees free
   up; `deps`, `affects-overlap`, `human`, and `invalid` need a human decision
   outside this loop; `decisions` is a third case — it neither self-resolves
   nor needs a decision outside this loop, it's resolved *inside* this loop
   by the coordinator's own CLI call, but only once the user tells you to —
-  see §2.5.1. Note: `affects-overlap`
+  see §2.5.1. `relay-untailed` and `worktree-unsupported` are a fourth: both
+  are configuration faults that will recur every cycle until someone edits
+  something outside this loop, so report them once and don't wait on them.
+  `relay-untailed` means a relay-mode variant has no `prompt_tail`, so a
+  dispatched worker would drop into an interactive menu unattended — the fix
+  is `workflow.pipeline.<variant>.prompt_tail` in the manifest, and the
+  reason string names the variant. `worktree-unsupported` means the plan
+  needs a worktree provisioned and the target backend can't; `gw work
+  orchestrate` passes `provisions_worktrees=True` today and exposes no flag
+  to change it, so this kind should not reach this skill through the CLI —
+  if one arrives, say so rather than working around it. Note:
+  `affects-overlap`
   fires both on a real overlap
   *and* on an item with an empty `affects` list (declaring `affects` is what
   unlocks parallel dispatch) — don't report an empty-`affects` block to the
@@ -276,21 +293,13 @@ After either call:
    one of its children — so it will never appear in this root's `dispatches[]`
    or `blocked[]`. Say so: "filed `<follow-up-path>` — it's a peer item, not
    wired into this run; drive it separately, e.g. a fresh
-   `/graph-works:auto-drive <follow-up-path>`." Otherwise it reads as having
+   `/gw:auto-drive <follow-up-path>`." Otherwise it reads as having
    silently vanished.
 3. **Restart the cycle at §2.1** — the same rule §2.4 applies after
    `advances[]`. The ledger just changed, and the routing layer recomputes its
    open-decision gate from the ledger on every planning pass, so an item that
    was `blocked` on the now-settled entry may be dispatchable on the very next
    plan call. Never act on a plan you already know is stale.
-
-**Live-validation item:** on a real run against an epic seeded with one
-`open` and one `assumed` decision, confirm that (a) the decision lines print
-after the blocker lines in §2.5 and never while a worker is live or
-mid-`attend`, and (b) a human-initiated "overturn D-nnn …" instruction
-round-trips through `gw work decision overturn`, prints the peer-item
-caveat, and the cycle restarts at §2.1 with the previously-blocked item now
-dispatchable.
 
 ### 2.6 Dispatch diff
 
@@ -318,8 +327,8 @@ orca orchestration check --run <run_id> --wait \
   15s so the caller can tell the process is alive — stdout carries only the
   real response. Don't merge streams (`2>&1`) when capturing this call; if a
   merge is unavoidable, filter with `jq "select(._keepalive|not)"`. The
-  deprecated `_heartbeat` alias inside this keepalive stream is unrelated to
-  worker heartbeat messages or `last_heartbeat_at` (§3 step 3) — three
+  `_heartbeat` alias inside this keepalive stream is unrelated to worker
+  heartbeat messages and to `last_heartbeat_at` (§3 step 3) — three
   unrelated things share the name.
 - **On timeout with nothing delivered:**
   `orca orchestration worker-show --dispatch <id> --json` for every
@@ -357,10 +366,9 @@ For each planned-but-undispatched entry from §2.6:
      creation flags (`--name`/`--repo`/`--base-branch`), which the CLI
      rejects for an existing worktree.
    - Worktree action `fork-child` → `--worktree new-child --name <worktree.branch> --base-branch <worktree.base_branch>`.
-     **Live-validation item:** `worker-start` has no `--parent-worktree`
-     flag; `new-child` is expected to infer its parent from this
-     coordinator's own worktree context (which is the epic worktree per the
-     shared-epic-worktree design). Confirm this on the first real dispatch.
+     `worker-start` has no `--parent-worktree` flag: `new-child` infers its
+     parent from this coordinator's own worktree context, which is the epic
+     worktree. Step 3's assertion is what verifies where it landed.
    - Worktree action `create-top-level` → `--worktree new-top-level --name <worktree.branch> --base-branch <worktree.base_branch> --repo <repo selector resolved in §0>`.
    - Worktree action `main` → `--worktree path:<worktree.path>`, same mapping
      as `reuse` — the main checkout already exists, there is nothing to
@@ -368,16 +376,19 @@ For each planned-but-undispatched entry from §2.6:
      worker to pass `--worktree`/`--branch` explicitly on its own
      `gw work advance` calls, since it is running directly in the main
      checkout and cwd-based worktree inference cannot detect that case.
-     **Known and accepted:** the fork's CLI cannot emit this action yet —
-     `packages/work-tracker-okf/` has no `orchestrate` module; `action` typed
-     `"reuse" | "fork-child" | "create-top-level" | "main"` still lives only
-     in `agent-research/packages/work-io/src/work_io/orchestrate.py`. This
-     mapping documents the surface ahead of the port, consistent with the
-     rest of this section.
-   - **Live-validation item:** `worktree.branch` values are slash-containing
-     (e.g. `epic/orca-auto-drive-pipeline`); confirm `--name` accepts that
-     verbatim as the git branch name rather than treating it as a display
-     name with a derived branch. Adjust this mapping if not.
+     `_resolve_worktree` in
+     `packages/graph-works-core/src/graph_works_core/orchestrate/commands.py`
+     chooses `main` over `reuse` whenever the resolved worktree equals the
+     code repo's own checkout, and `_prompt` in the same module appends the
+     extra "record the worktree as … and the branch as …" line the worker
+     needs.
+   - `--name` is a *display* name, not a branch name. Orca derives the git
+     branch itself as `<host git user slug>/slugify(name)` —
+     unconditionally, for every `--name`, on every creation — and
+     `worker-start`, `orca worktree create` and `orca worktree set` expose
+     no branch control at all. A slash-containing `worktree.branch` is
+     therefore never the branch Orca creates. Do not compare the two; step 3
+     below defines what is verified instead.
    - The plan's top-level `permission_mode` (default `bypassPermissions`) is
      the intended permission mode for the launched agent — state it as
      context, not a flag; `worker-start` has no `--permission-mode` flag
@@ -386,19 +397,102 @@ For each planned-but-undispatched entry from §2.6:
      failed dispatch: go straight to the failure flow (§4.2) — surface the
      JSON's `stage`/`failedStage`/`recovery` hints to the user, don't
      silently retry.
-3. **Confirm the prompt was actually submitted.** *Workaround for a runtime
-   defect — delete this step once `worker-start` submits reliably or grows a
-   flag for it. It has none today; the defect is filed upstream against
-   Orca.*
+3. **Read back where the dispatch actually landed.** Do this *before* the
+   submission probe: nudging a worker that is sitting in the wrong worktree
+   only makes it produce work nobody will look for. A failed placement never
+   reaches step 4.
+
+   **Where the truth comes from** — prefer the response already in hand:
+
+   1. `worker-start --json`'s `effects[]`. A worktree effect reads
+      `{kind: "worktree", action: "created_child" | …, id: "<repoId>::<path>"}`.
+      When that entry is present the path is the segment after `::`, and
+      **no extra Orca call is made.**
+   2. Otherwise `orca orchestration worker-show --dispatch <dispatch_id> --json`
+      → `result.worker.worktree_id` (the full `<repoId>::<path>` value).
+   3. Then `orca worktree show --worktree id:<worktree_id> --json` for the
+      fields the assertion needs: `path`, `branch`, `displayName`,
+      `parentWorktreeId`, `isMainWorktree`.
+
+   `branch` comes back fully qualified (`refs/heads/<name>`). **Strip
+   `refs/heads/` before printing it** — a raw paste reads as a different
+   name than the one the human will see in `git branch`.
+
+   **The assertion — never a branch-name comparison.** The upstream slug
+   transform is undocumented and unversioned; an assertion built on it would
+   keep passing against a formula that no longer describes reality the day
+   Orca changes it. Nothing below consults a branch name.
+
+   | Planned `worktree.action` | Assertion |
+   |---|---|
+   | `reuse`, `main` | The observed `path` equals the planned `worktree.path`, compared after resolving symlinks on both sides. No worktree was created, so nothing else is checked. |
+   | `fork-child` | `parentWorktreeId` is non-null; the observed `path` is not one already claimed by another dispatch this Run; and `worktree.base_branch` resolves in the observed worktree and is an ancestor of its HEAD — one `git -C <observed path> merge-base --is-ancestor <base_branch> HEAD`. |
+   | `create-top-level` | `isMainWorktree` is false; the observed `path` is unclaimed this Run; and the same base-branch ancestry check. |
+
+   The ancestry check is what replaces the branch-name comparison: it asks
+   the question the name was only ever a proxy for — *is this worker forked
+   off the work it was supposed to be forked off* — and it asks git, which
+   cannot drift.
+
+   `displayName` preserves the requested `--name` verbatim and is the only
+   place the plan's intent survives on the Orca side. **Report it; assert
+   nothing on it** — Orca may truncate or uniquify a display name, and doing
+   so does not mean the placement is wrong.
+
+   **Always print the placement line**, mismatch or not, for every dispatch:
+
+   ```
+   dispatched <key> -> <observed path> on <observed branch>
+   ```
+
+   The coordinator plans a branch name but never sees the one Orca actually
+   creates, so this line is its only record. It means a human reading the
+   scrollback hours later can find the branch a stage's work is on without
+   reconstructing anything.
+
+   **Do not substitute the observed values downstream.** §2.4's
+   `gw work advance --worktree/--branch` and §5's merge-back summary keep
+   using the planner's values; reconciling the two is the planner lane's
+   work, not this read-back's.
+
+   **On assertion failure, halt into §4.2.** Print the mismatch loudly:
+
+   ```
+   PLACEMENT MISMATCH <key>: planned <action> at <planned path>,
+     actual <observed path> on <observed branch>
+   ```
+
+   then go directly to the failure question — the same three options
+   (*retry* / *skip this item* / *stop the run*) every other dead-or-wrong
+   dispatch gets — and **skip step 4's submission probe entirely** for this
+   dispatch. This is a halt, not a raise: it routes into an existing
+   human-decision path, so a false positive costs one question, not a lost
+   run.
+
+   **A `-N` suffixed duplicate worktree is a note, not a halt.** Dispatching
+   a stage for an item whose earlier worktree still exists makes Orca create
+   a suffixed duplicate (`…-2`) rather than reusing or refusing. Such a
+   worktree passes the assertion — it is new, correctly based, and the work
+   in it is real — and it is findable, because the placement line printed
+   its actual path. Report it and continue:
+
+   ```
+   note <key>: worktree name uniquified by Orca (requested "<displayName>",
+     landed at <path>)
+   ```
+
+   Halting here would block legitimate dispatches over a cosmetic surprise.
+
+4. **Confirm the prompt was actually submitted.** `worker-start` exposes no
+   flag that guarantees submission, so this probe runs on every dispatch.
 
    A zero exit means the terminal was created and the prompt was typed into
    it, **not** that it was submitted. `worker-start` leaves the prompt
    sitting unsent in the input box, and nothing downstream can tell that
    apart from a thinking worker: the dispatch reports `running`, §2.7 waits
    its full timeout, `worker-show` still says `running`, and the loop goes
-   round again. **Observed 5 of 5** `worker-start` calls in one run — treat
-   this as the default case, not an intermittent one: assume unsent until
-   proven otherwise.
+   round again. This is the default case, not an intermittent one: **assume
+   unsent until proven otherwise.**
 
    Allow a short settle interval before probing — transcript messages
    appear within seconds of a real submission, but heartbeats take 46–60s
@@ -427,15 +521,11 @@ For each planned-but-undispatched entry from §2.6:
       treat it as unsent and proceed to the nudge below, regardless of what
       `source` reports. Only fall back to reporting and letting the human
       decide when there are no healthy siblings to compare against (e.g.
-      this is the only live dispatch this cycle). This case was previously
-      treated as never decisive; it isn't — during the 2026-08-15 run this
-      exact signature meant "prompt never submitted" every time it
-      appeared, and reporting it instead of nudging cost several idle check
-      cycles while sibling workers were visibly healthy. **What doesn't
-      change:** the heartbeat veto (case 1) stays a hard veto — a dispatch
-      that has ever heartbeat is never nudged, however idle it looks — and
-      "never nudge a worker you have not probed" (case 4, below) still
-      applies before any nudge.
+      this is the only live dispatch this cycle). Two rules bound this
+      branch: the heartbeat veto (case 1) is absolute — a dispatch that has
+      ever heartbeat is never nudged, however idle it looks — and "never
+      nudge a worker you have not probed" (case 4, below) applies before
+      any nudge.
    4. Heartbeat null **and** transcript empty **and** `result.source ==
       "transcript"` ⇒ treat as unsent ⇒ nudge **once**:
 
@@ -451,7 +541,7 @@ For each planned-but-undispatched entry from §2.6:
    5. Re-run step 2. Non-empty transcript ⇒ recovered, continue normally.
       Two failed nudges → failure flow (§4.2), same three options.
 
-4. **Attend dispatches only** (`mode: attend` — the design stage), after a
+5. **Attend dispatches only** (`mode: attend` — the design stage), after a
    successful start:
    - `orca worktree set --worktree <same worktree selector used above> --workspace-status in-review --comment "auto-drive: <work-path> design stage waiting for you — join <agent_terminal_handle>"`.
    - Print the same join instruction directly in this session — the human
@@ -459,7 +549,7 @@ For each planned-but-undispatched entry from §2.6:
    - Remember this dispatch's key as attend-pending for this Run, so its
      `worker_done` (§4.1) triggers the flip-back to `in-progress`.
    - This is the one piece of session-local state in this skill — if the session crashes before `worker_done` arrives, flip the worktree back manually with `orca worktree set --worktree <selector> --workspace-status in-progress` if it looks stuck at `in-review` after a resume.
-5. `orca orchestration task-update --id <task_id> --status dispatched --run <run_id>`
+6. `orca orchestration task-update --id <task_id> --status dispatched --run <run_id>`
    so the next cycle's `task-list` (§2.1) reflects it as an existing task.
    (Valid `--status` values are `pending, ready, dispatched, completed,
    failed, blocked` — `in_progress` is not one of them; `dispatched` is the
@@ -513,8 +603,8 @@ Triggered from §2.1's live-derivation or §2.7's wait-timeout `worker-show`.
 
 A worker in `relay` mode (the finish stage) sends this via its own
 `orca orchestration ask` when it needs the merge/PR/hold/discard decision —
-this coordinator only relays it, it does not interpret the question
-(deciding what the options mean is child 5's / the worker's job).
+this coordinator only relays it, it does not interpret the question —
+deciding what the options mean is the worker's job.
 
 1. Mirror the message's question text and options to the user as one
    `AskUserQuestion` in this session.
@@ -558,7 +648,7 @@ wait-timeout.
 
 ## 5. Resume & wrap-up
 
-**Resume** is just re-running `/graph-works:auto-drive <work-path>` (§1 re-binds
+**Resume** is just re-running `/gw:auto-drive <work-path>` (§1 re-binds
 the same Run by objective). Cycle 1's live-derivation (§2.1) classifies
 every existing task — live, settled, or dead — before anything else
 happens; dead dispatches enter the failure flow immediately. Nothing is
@@ -580,8 +670,7 @@ resumes identically to one that's been running for hours.
    nobody looked at" is exactly the silent failure the ledger exists to
    prevent. Printing costs nothing; skip only when both lists are empty.
 4. Stop. Merging the epic branch to `develop` is **not** this coordinator's
-   job — it happens inside the root item's finish-relay stage (child 5's
-   scope), not here.
+   job — it happens inside the root item's finish-relay stage, not here.
 
 **User stop** (mid-run, on explicit instruction): exit the loop between
 cycles — never mid-dispatch. Live workers keep running independently; offer
@@ -593,14 +682,17 @@ before exiting — same mechanics as the failure question's Stop branch
 
 - Any dispatch-decision logic — readiness, worktree choice, model, prompt
   assembly, parallelism caps, `affects` serialization — all owned by
-  `gw work orchestrate`. A wrong-looking plan (bad worktree action, a
-  missing blocker kind, a bad prompt) gets filed against the decision-engine
-  work item; never patched around in this skill's prose.
+  `gw work orchestrate`, whose engine is
+  `graph_works_core.orchestrate.commands` (`plan()` and the `_resolve_worktree`
+  ladder it calls). A wrong-looking plan (bad worktree action, a missing
+  blocker kind, a bad prompt) gets fixed there or filed as a work item;
+  never patched around in this skill's prose.
 - Finish-stage relay behavior *inside* the worker — deciding what the
-  merge/PR/hold/discard options mean and sending the `ask` — child 5's
-  scope. This skill only mirrors the `question` it receives (§4.3).
-- A vault-wide watcher or scheduled sweep mode. Orca automations may invoke
-  this skill later; today it drives exactly one path per invocation.
+  merge/PR/hold/discard options mean and sending the `ask` — belongs to
+  `gw:finishing-relay`. This skill only mirrors the `question` it receives
+  (§4.3).
+- A vault-wide watcher or scheduled sweep mode. This skill drives exactly
+  one path per invocation.
 - Auto-retry of failed stages, and automatic merge-conflict resolution for
   parallel forks — both explicit policy (see the failure question and the
   `affects`-disjoint rule), not gaps.

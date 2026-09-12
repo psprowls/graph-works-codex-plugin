@@ -1,10 +1,5 @@
 # Obsidian Setup
 
-> **Substrate ownership.** This document describes behavior that the graph-works rebuild is
-> re-implementing. Identifiers and paths here are retargeted for the `graph-works` namespace, but
-> the behavioral truth is owned by [`feature-epic-feature-workspace-manifest-layout-resolution`](/work/_archive/epic-graph-works-core/children/_archive/feature-epic-feature-workspace-manifest-layout-resolution.md) and is re-authored there, not here.
-> Treat a disagreement between this page and that item as this page being stale.
-
 Recommended Obsidian configuration for a Code Wiki. None of this is strictly required — the wiki is just markdown files — but these settings remove friction.
 
 ## Open the vault
@@ -19,8 +14,8 @@ Recommended Obsidian configuration for a Code Wiki. None of this is strictly req
 ## Settings → Files and Links
 
 - **Default location for new notes:** none — new pages are typed (`concepts/`, `adrs/`, `work/`, `sources/`, etc. under `<workspace>/okf/`); file each note in the lane matching its kind rather than relying on a single default folder
-- **New link format:** `Shortest path when possible`
-- **Use `[[Wikilinks]]`:** ON
+- **New link format:** `Absolute path in vault`
+- **Use `[[Wikilinks]]`:** OFF
 - **Attachment folder path:** `sources/references/` (attached images are copied here by the ingest flow, alongside the material that references them)
 - **Automatically update internal links:** ON
 
@@ -37,12 +32,12 @@ Recommended Obsidian configuration for a Code Wiki. None of this is strictly req
 - **Templates** — enable and set the template folder to `.templates`
 - **Tag pane** — tag-driven navigation
 - **Search**
-- **Page preview** — hover a wikilink to preview
+- **Page preview** — hover a link to preview
 - **Canvas** — useful for architecture sketches
 
 ## Recommended community plugins
 
-- **Obsidian Web Clipper** — clip articles to a local folder, then run `/graph-works:ingest <path>` to bring them into `sources/`
+- **Obsidian Web Clipper** — clip articles to a local folder, then run `/gw:ingest <path>` to bring them into `sources/`
 - **Dataview** — query over frontmatter. Dynamic tables like "all package pages where `language: typescript`".
 - **Marp for Obsidian** — render any markdown with `marp: true` frontmatter as a slide deck.
 - **Advanced Tables** — easier markdown table editing
